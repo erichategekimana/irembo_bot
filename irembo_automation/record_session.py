@@ -1,6 +1,6 @@
 import time
-from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
+from playwright.sync_api import sync_playwright  # type: ignore[import]
+from playwright_stealth import stealth_sync  # type: ignore[import]
 
 def record_irembo_session():
     with sync_playwright() as p:
