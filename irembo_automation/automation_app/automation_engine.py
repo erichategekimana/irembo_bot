@@ -104,85 +104,161 @@ class IremboAutomationEngine:
             except Exception:
                 pass
 
+    def _type_into_field(self, locator, text):
+        """
+        Types text character-by-character into a field to bypass Angular custom
+        directives like 'appnospace' that block .fill() via native value setting.
+        Also dispatches Angular-required input/change events after each key.
+        """
+        locator.click()
+        locator.evaluate("el => { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); }")
+        for char in text:
+            locator.type(char, delay=random.randint(40, 90))
+        # Final dispatch to ensure Angular form state is updated
+        locator.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
+        locator.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
+        locator.evaluate("el => el.dispatchEvent(new Event('blur', { bubbles: true }))")
+
+    def _pause_on_error(self, reason):
+        """
+        On non-recoverable errors, updates DB status to FAILED with the reason
+        stored in application_number (as a temporary error note field), then
+        raises so the worker thread logs it cleanly.
+        """
+        print(f"[Engine PAUSED] {reason}")
+        if self.booking_record:
+            self.booking_record.application_number = f"[ERROR] {reason}"
+            self.update_database_state("FAILED")
+        raise ValueError(reason)
+
     def handle_identity_verification(self, national_id, client_verification_data):
         """
-        Inputs National ID credentials and clears the identity popup modal layout.
-        Fixes Angular forms data binding lag by forcing standard input events.
+        Inputs National ID credentials and clears the identity popup modal.
+        
+        Handles two verification challenge types from Irembo:
+          - Name challenge: fill nameFormControl with the applicant's first name
+          - Birth date challenge: fill datePicker with DD/MM/YYYY formatted date
+        
+        Robustness features:
+          - Uses type() to bypass Angular 'appnospace' directive (not fill())
+          - Checks checkbox state before clicking (avoids accidentally unchecking)
+          - Waits up to 5s for Genzura button to become enabled after input
+          - On failure: updates DB to FAILED with reason, does not silently hang
         """
         print(f"[Step 8] Injecting National ID: {national_id}")
         id_field = self.page.locator('input[formcontrolname="nationalIdFormControl"]')
         id_field.fill(national_id)
-        id_field.press("Enter")
+        id_field.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
+        id_field.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
+        id_field.press("Tab")
+        time.sleep(0.5)
         
         print("[Step 8] Monitoring for the security validation modal container...")
-        self.page.wait_for_selector("mat-dialog-container", timeout=12000)
-        time.sleep(1) 
+        try:
+            self.page.wait_for_selector("mat-dialog-container app-officer-action", timeout=12000)
+        except Exception:
+            self._pause_on_error("Identity verification modal did not appear. National ID may be invalid or session expired.")
+        time.sleep(1)
 
         # Resolve dynamic validation field targets
         name_input = self.page.locator('input[formcontrolname="nameFormControl"]')
         date_input = self.page.locator('input[id="datePicker"]')
 
-        # Wait for either name_input or date_input to become visible (to avoid race conditions)
-        print("[Step 8] Waiting for validation fields to render inside the modal...")
+        # Wait up to 6s for either challenge field to render
+        print("[Step 8] Waiting for verification challenge fields to render...")
+        challenge_detected = False
         start_time = time.time()
-        while time.time() - start_time < 5.0:
+        while time.time() - start_time < 6.0:
             if name_input.is_visible() or date_input.is_visible():
+                challenge_detected = True
                 break
-            time.sleep(0.2)
+            time.sleep(0.3)
 
-        # Determine inputs based on database record or fallbacks
-        first_name = self.booking_record.first_name if (self.booking_record and self.booking_record.first_name) else client_verification_data
-        
+        if not challenge_detected:
+            self._pause_on_error(
+                "Verification challenge fields (name or birth date) did not appear inside the modal. "
+                "The modal may have changed structure or an unexpected error was shown."
+            )
+
+        # Determine values from DB record
+        first_name = (
+            self.booking_record.first_name 
+            if (self.booking_record and self.booking_record.first_name) 
+            else client_verification_data
+        )
         if self.booking_record and self.booking_record.birth_date:
-            # Format as DD/MM/YYYY which is standard for Irembo
             birth_date_str = self.booking_record.birth_date.strftime("%d/%m/%Y")
         else:
             birth_date_str = client_verification_data
 
+        # Fill whichever challenge field is visible
         if name_input.is_visible():
-            print(f"[Step 8] Verification challenge detected: Name layout requested. Filling: {first_name}")
-            name_input.fill(first_name)
-            # FORCE FIX: Dispatch input triggers so Angular recognizes the form field values
-            name_input.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
-            name_input.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
+            print(f"[Step 8] Challenge: Name requested. Typing: {first_name}")
+            self._type_into_field(name_input, first_name)
         elif date_input.is_visible():
-            print(f"[Step 8] Verification challenge detected: Birth date selection entry requested. Filling: {birth_date_str}")
-            date_input.fill(birth_date_str)
-            date_input.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
-            date_input.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
+            print(f"[Step 8] Challenge: Birth date requested. Typing: {birth_date_str}")
+            self._type_into_field(date_input, birth_date_str)
 
-        print("[Step 8] Checking inner modal terms checkbox frame elements...")
-        # FORCE FIX: Click the core sub-container element to reliably activate the checkbox state toggle
-        checkbox_container = self.page.locator('mat-checkbox:has-text("Nemeye amategeko agenga imikoreshereze") .mat-checkbox-inner-container')
-        checkbox_container.click()
         time.sleep(0.5)
 
-        print("[Step 8] Submitting identity verification review confirmation ('Genzura')...")
-        review_btn = self.page.locator('mat-dialog-container button.btn-primary:has-text("Genzura")')
-        
-        # Wait for the button to be visible
+        # Handle Terms checkbox — only check it if it is NOT already checked
+        print("[Step 8] Verifying terms checkbox state...")
+        checkbox = self.page.locator('mat-checkbox:has-text("Nemeye") ')
+        checkbox_inner = checkbox.locator('.mat-checkbox-inner-container')
+        try:
+            is_checked = "mat-checkbox-checked" in (checkbox.get_attribute("class") or "")
+            if not is_checked:
+                print("[Step 8] Terms checkbox is unchecked. Clicking to accept...")
+                checkbox_inner.click()
+                time.sleep(0.5)
+            else:
+                print("[Step 8] Terms checkbox already checked. Skipping click.")
+        except Exception as e:
+            print(f"[Step 8] Warning: Could not determine checkbox state ({e}). Attempting click anyway...")
+            checkbox_inner.click()
+            time.sleep(0.5)
+
+        # Locate Genzura button — selector matches the exact HTML: button.btn-primary inside mat-dialog-container
+        print("[Step 8] Locating 'Genzura' confirmation button...")
+        review_btn = self.page.locator('mat-dialog-container button.btn-primary')
+
         try:
             review_btn.wait_for(state="visible", timeout=4000)
         except Exception:
             self.check_for_errors()
-            raise ValueError("Verification button ('Genzura') was not found or not visible.")
+            self._pause_on_error("'Genzura' button was not found in the modal. The page structure may have changed.")
 
-        # Check if the button is disabled
-        if review_btn.is_disabled():
-            print("[Warning] Form validation state locked. Checking for immediate validation errors...")
-            time.sleep(1)
+        # Wait up to 5s for the button to become enabled (Angular may enable it after form validates)
+        print("[Step 8] Waiting for 'Genzura' button to become enabled...")
+        btn_enabled = False
+        start_time = time.time()
+        while time.time() - start_time < 5.0:
+            if not review_btn.is_disabled():
+                btn_enabled = True
+                break
+            time.sleep(0.3)
+
+        if not btn_enabled:
+            # Check if there are portal error messages visible
             self.check_for_errors()
-            raise ValueError("Verification button ('Genzura') is disabled. Please verify ID, name, or birth date values.")
+            self._pause_on_error(
+                "Verification button ('Genzura') remained disabled after 5s. "
+                "Check that first_name or birth_date in the database record exactly matches the ID document."
+            )
 
+        print("[Step 8] Submitting identity verification ('Genzura')...")
         review_btn.click()
-        
-        # Wait until modal completely detaches from view layers, or check for errors
+
+        # Wait for the modal to close — if it doesn't, something went wrong
         try:
-            self.page.wait_for_selector("mat-dialog-container", state="detached", timeout=8000)
-            print("[Step 8] Identity validation parameters cleared successfully.")
+            self.page.wait_for_selector("mat-dialog-container", state="detached", timeout=10000)
+            print("[Step 8] Identity verification completed successfully.")
         except Exception:
             self.check_for_errors()
-            raise ValueError("Identity verification modal did not close. Please verify the credentials.")
+            self._pause_on_error(
+                "Identity verification modal did not close after clicking 'Genzura'. "
+                "Credentials may be incorrect or the portal returned an error."
+            )
 
     def navigate_to_booking_form(self, national_id, verification_data):
         """
