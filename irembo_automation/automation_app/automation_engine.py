@@ -85,15 +85,6 @@ class IremboAutomationEngine:
         id_field.fill(national_id)
         id_field.press("Enter")
         
-        # If the split model defines a provisional number, populate the verified field element
-        if self.booking_record and self.booking_record.provisional_number:
-            print(f"[Step 8] populating Provisional License ID: {self.booking_record.provisional_number}")
-            prov_field = self.page.locator('input[formcontrolname="provisionalLicenseNumberFormControl"]')
-            prov_field.fill(self.booking_record.provisional_number)
-            
-            # Click the dynamic target search trigger button inside the panel wrapper
-            self.page.locator('form.ng-valid button.btn-primary, button:has-text("Shakisha")').first.click()
-
         print("[Step 8] Monitoring for the security validation modal container...")
         self.page.wait_for_selector("mat-dialog-container", timeout=12000)
         time.sleep(1) 
@@ -102,15 +93,24 @@ class IremboAutomationEngine:
         name_input = self.page.locator('input[formcontrolname="nameFormControl"]')
         date_input = self.page.locator('input[id="datePicker"]')
 
+        # Determine inputs based on database record or fallbacks
+        first_name = self.booking_record.first_name if (self.booking_record and self.booking_record.first_name) else client_verification_data
+        
+        if self.booking_record and self.booking_record.birth_date:
+            # Format as DD/MM/YYYY which is standard for Irembo
+            birth_date_str = self.booking_record.birth_date.strftime("%d/%m/%Y")
+        else:
+            birth_date_str = client_verification_data
+
         if name_input.is_visible():
-            print("[Step 8] Verification challenge detected: Name layout requested.")
-            name_input.fill(client_verification_data)
+            print(f"[Step 8] Verification challenge detected: Name layout requested. Filling: {first_name}")
+            name_input.fill(first_name)
             # FORCE FIX: Dispatch input triggers so Angular recognizes the form field values
             name_input.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
             name_input.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
         elif date_input.is_visible():
-            print("[Step 8] Verification challenge detected: Birth date selection entry requested.")
-            date_input.fill(client_verification_data)
+            print(f"[Step 8] Verification challenge detected: Birth date selection entry requested. Filling: {birth_date_str}")
+            date_input.fill(birth_date_str)
             date_input.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
             date_input.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
 
@@ -168,17 +168,113 @@ class IremboAutomationEngine:
         self.page.locator('mat-dialog-container button:has-text("Saba")').click()
         self.page.wait_for_load_state("networkidle")
 
-        # Handshake input validations
+        # Handshake input validations (enters ID, handles modal name/birthdate checks, accepts modal terms, and clicks Genzura)
         self.handle_identity_verification(national_id, verification_data)
+
+        # -----------------------------------------------------------------------
+        # DEFINITIVE FLOW PROVISIONAL NUMBER INPUT
+        # -----------------------------------------------------------------------
+        if self.booking_record and self.booking_record.provisional_number:
+            print(f"[Engine] Filling Provisional License ID: {self.booking_record.provisional_number}")
+            prov_field = self.page.locator('input[formcontrolname="provisionalLicenseNumberFormControl"]')
+            # Wait for provisional field to be visible and editable
+            prov_field.wait_for(state="visible", timeout=10000)
+            prov_field.fill(self.booking_record.provisional_number)
+            # Ensure Angular recognizes the input
+            prov_field.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
+            prov_field.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
+            time.sleep(0.5)
+
+            # Click Shakisha to load the registration table
+            print("[Engine] Submitting provisional license details (Shakisha)...")
+            shakisha_btn = self.page.locator('button:has-text("Shakisha")')
+            shakisha_btn.wait_for(state="visible", timeout=5000)
+            shakisha_btn.click()
+            time.sleep(1)
 
     def set_angular_dropdown(self, control_name, option_text):
         """
         Handles dynamic choice options for custom Angular select modules.
+        Can match by exact control_name, or look for placeholder/label text if exact match is not found.
         """
-        dropdown_selector = f'ng-select[formcontrolname="{control_name}"]'
-        self.page.locator(dropdown_selector).click()
+        # Try finding by exact formcontrolname first
+        dropdown = self.page.locator(f'ng-select[formcontrolname="{control_name}"]')
+        if not dropdown.is_visible():
+            # Fallback 1: case-insensitive partial match on formcontrolname
+            dropdown = self.page.locator(f'ng-select[formcontrolname*="{control_name}" i]').first
+        
+        if not dropdown.is_visible():
+            # Fallback 2: search for the ng-select containing label text or placeholder
+            dropdown = self.page.locator(f'ng-select:has-text("{control_name}")').first
+
+        if not dropdown.is_visible():
+            # Fallback 3: look for any ng-select
+            dropdown = self.page.locator('ng-select').first
+
+        print(f"[Dropdown] Clicking dropdown matching {control_name} to select option: {option_text}")
+        dropdown.click()
         self.page.wait_for_selector(".ng-dropdown-panel", timeout=5000)
-        self.page.locator(f'.ng-dropdown-panel .ng-option:has-text("{option_text}")').click()
+        
+        options = self.page.locator('.ng-dropdown-panel .ng-option')
+        options.wait_for(state="visible", timeout=5000)
+        
+        matched = False
+        count = options.count()
+        
+        # Tier 1: Exact match (case-sensitive)
+        for i in range(count):
+            opt = options.nth(i)
+            text = opt.inner_text().strip()
+            if text == option_text:
+                opt.click()
+                matched = True
+                break
+                
+        # Tier 2: Exact match (case-insensitive)
+        if not matched:
+            for i in range(count):
+                opt = options.nth(i)
+                text = opt.inner_text().strip()
+                if text.lower() == option_text.lower():
+                    opt.click()
+                    matched = True
+                    break
+
+        # Tier 3: Suffix match (case-insensitive) - handles e.g. "Icyiciro B" ending with "B"
+        if not matched:
+            for i in range(count):
+                opt = options.nth(i)
+                text = opt.inner_text().strip().lower()
+                if text.endswith(option_text.lower()):
+                    opt.click()
+                    matched = True
+                    break
+
+        # Tier 4: Word boundary match (case-insensitive) - handles e.g. "B" in "Icyiciro B exam"
+        if not matched:
+            for i in range(count):
+                opt = options.nth(i)
+                text = opt.inner_text().strip().lower()
+                pattern = r'\b' + re.escape(option_text.lower()) + r'\b'
+                if re.search(pattern, text):
+                    opt.click()
+                    matched = True
+                    break
+
+        # Tier 5: Substring match (case-insensitive fallback)
+        if not matched:
+            for i in range(count):
+                opt = options.nth(i)
+                text = opt.inner_text().strip().lower()
+                if option_text.lower() in text:
+                    opt.click()
+                    matched = True
+                    break
+                    
+        # Final Fallback: click the first option if no match is found
+        if not matched and count > 0:
+            options.first.click()
+            
         time.sleep(1)
 
     def evaluate_and_select_slot(self, target_center="BUSANZA"):
@@ -219,28 +315,49 @@ class IremboAutomationEngine:
         Runs automated monitoring loops over structural center layouts.
         """
         print("[Engine] Polling engine activated. Monitoring availability maps...")
+        
+        # 1. Initial selection of category
+        if self.booking_record and self.booking_record.category:
+            print(f"[Engine] Setting category selection to: {self.booking_record.category}")
+            # Try formcontrolname first, fallback to partial matches
+            self.set_angular_dropdown("licenseCategoryFormControl", self.booking_record.category)
+        else:
+            print("[Warning] No target category specified in database record. Skipping initial category selection.")
+
+        # 2. Initial selection of district
+        print("[Engine] Setting district selection to Kicukiro...")
+        self.set_angular_dropdown("districtFormControl", "Kicukiro")
+        
         while True:
             try:
-                # Use helper drop function definitions to verify fields
-                self.set_angular_dropdown("districtFormControl", "Kicukiro")
-                
                 # Extract and click available slots matches
                 slot_secured = self.evaluate_and_select_slot(target_center=target_center)
 
                 if slot_secured:
+                    print(f"[Engine] Slot secured at {target_center}! Transitioning to OTP stage...")
                     self.enter_cooperative_interrupt_state()
                     client_phone = self.booking_record.phone_number if self.booking_record else "0780000000"
                     billing_id = self.resume_and_finalize_booking(phone_number=client_phone)
                     return billing_id 
 
-                time.sleep(random.uniform(3.5, 6.2))
-                self.page.reload(wait_until="commit")
+                # Wait between polls using random human-like delay
+                poll_delay = random.uniform(4.0, 7.5)
+                print(f"[Engine] No slot found at {target_center}. Waiting {poll_delay:.2f}s before toggling district to refresh...")
+                time.sleep(poll_delay)
+                
+                # Stealth/efficient refresh: toggle district to force Angular to update slots list without page reload
+                print("[Engine] Toggling district to refresh slots...")
+                self.set_angular_dropdown("districtFormControl", "Gasabo")
+                time.sleep(random.uniform(1.2, 2.5))
+                self.set_angular_dropdown("districtFormControl", "Kicukiro")
+                time.sleep(random.uniform(1.2, 2.5))
 
             except InterruptedError as ie:
                 print(f"[Engine] Shutting down polling gracefully: {ie}")
                 break
             except Exception as e:
                 print(f"[Engine] Exception occurrence inside checking loop: {str(e)}")
+                # In case of general failure, sleep briefly and try toggling district again
                 time.sleep(5)
 
     def enter_cooperative_interrupt_state(self):
