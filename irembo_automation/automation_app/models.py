@@ -53,10 +53,18 @@ class ClientApplication(models.Model):
     )
     email = models.EmailField(blank=True, null=True)
     
-    # Licensing Details
-    category_or_provisional = models.CharField(
-        max_length=50, 
-        help_text="Target category (e.g., B) or existing provisional number"
+    # -----------------------------------------------------------------------
+    # UPDATED: Separated Licensing & Application Schema
+    # -----------------------------------------------------------------------
+    category = models.CharField(
+        max_length=10, 
+        help_text="Target driving category selection (e.g., A, B, B2, C1, D)"
+    )
+    provisional_number = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Provisional license string. Required for new Definitive applications; leave blank for Category Upgrades."
     )
 
     # Automation State Machine
@@ -85,8 +93,6 @@ class ClientApplication(models.Model):
         verbose_name = "Client Application"
         verbose_name_plural = "Client Applications"
         
-        # Performance & Flexibility Optimization
-        # Adding indexes speeds up Playwright lookups drastically when checking specific statuses
         indexes = [
             models.Index(fields=['status']),
             models.Index(fields=['national_id']),
@@ -98,6 +104,13 @@ class ClientApplication(models.Model):
     # ---------------------------------------------------------------------------
     # Business Logic Guardrails (Model Validation)
     # ---------------------------------------------------------------------------
+    @property
+    def is_upgrade_application(self):
+        """
+        Helper property: Returns True if the user is upgrading an existing definitive license.
+        """
+        return not bool(self.provisional_number)
+
     def clean(self):
         """
         Custom validation rules to maintain business logic integrity before saving.
@@ -111,8 +124,5 @@ class ClientApplication(models.Model):
             raise ValidationError({'birth_date': "Client must be at least 18 years old to register for a driving license."})
 
         # 2. State-Machine Safeguard: OTP validation
-        # If the system status is flagged as awaiting OTP, but your dashboard frontend tries 
-        # to clear out or bypass the token entry, raise an alert.
         if self.status == self.ProcessStatus.AWAITING_OTP and not self.otp_code:
-            # Note: This is an intentional state. This clean method just verifies it doesn't get corrupted.
             pass
