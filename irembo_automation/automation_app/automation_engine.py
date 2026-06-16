@@ -94,9 +94,11 @@ class IremboAutomationEngine:
                 for el in elements:
                     if el.is_visible():
                         error_text = el.inner_text().strip()
-                        if error_text:
-                            print(f"[Engine Error Detected] {error_text}")
-                            raise ValueError(f"Irembo Portal Error: {error_text}")
+                        # Ignore required field asterisks or empty elements
+                        if not error_text or error_text == "*":
+                            continue
+                        print(f"[Engine Error Detected] {error_text}")
+                        raise ValueError(f"Irembo Portal Error: {error_text}")
             except ValueError:
                 raise
             except Exception:
@@ -237,7 +239,11 @@ class IremboAutomationEngine:
             prov_field.press("Enter")
             time.sleep(0.5)
 
-            search_btn = self.page.locator('button:has-text("Shakisha"), form.ng-valid button.btn-primary, button.btn-primary').first
+            search_btn = self.page.locator(
+                'input[formcontrolname="provisionalLicenseNumberFormControl"] ~ button, '
+                'button.inline-btn, button.x-small-button, '
+                'button:has-text("Shakisha"), form.ng-valid button.btn-primary, button.btn-primary'
+            ).first
             try:
                 search_btn.wait_for(state="visible", timeout=3000)
                 print("[Engine] Clicking search/submit button...")
