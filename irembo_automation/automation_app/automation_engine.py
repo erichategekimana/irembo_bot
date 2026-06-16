@@ -185,11 +185,18 @@ class IremboAutomationEngine:
             prov_field.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
             time.sleep(0.5)
 
-            # Click Shakisha to load the registration table
-            print("[Engine] Submitting provisional license details (Shakisha)...")
-            shakisha_btn = self.page.locator('button:has-text("Shakisha")')
-            shakisha_btn.wait_for(state="visible", timeout=5000)
-            shakisha_btn.click()
+            # Click Shakisha or press Enter to load the registration table
+            print("[Engine] Submitting provisional license details...")
+            prov_field.press("Enter")
+            time.sleep(0.5)
+
+            search_btn = self.page.locator('button:has-text("Shakisha"), form.ng-valid button.btn-primary, button.btn-primary').first
+            try:
+                search_btn.wait_for(state="visible", timeout=3000)
+                print("[Engine] Clicking search/submit button...")
+                search_btn.click()
+            except Exception as e:
+                print(f"[Engine] Search button not visible or not found after 3s ({e}). Continuing...")
             time.sleep(1)
 
     def set_angular_dropdown(self, control_name, option_text):
