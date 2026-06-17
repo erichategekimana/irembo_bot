@@ -86,51 +86,71 @@ class FinalizationMixin:
             self.update_database_state("FAILED")
             return None
 
-        # ── Step 5: Collect billing number from confirmation page ─────────────
+                # ── Step 5: Collect billing number ──────────────────────────
+        # First, wait for any element that contains the billing label or a number starting with 88
+        billing_code = None
         try:
-            billing_locator = self.page.locator(
-                'text="Kode yo kwishyuriraho",'
-                'text="Kode you kwishyuriraho",'
-                ':has-text("Kode yo kwishyuriraho")'
-            )
-            billing_locator.wait_for(timeout=20000)
-
-            # Grab the full parent text which contains the numeric code
-            full_text = billing_locator.locator("xpath=..").inner_text()
-            match = re.search(r'(88\d+)', full_text)
-
-            if match:
-                billing_code = match.group(1)
-                print(f"[Final] Billing code captured: {billing_code}")
-
-                # Persist to DB
-                record = self.booking_record
-                if record:
-                    def _save_billing():
-                        record.billing_number = billing_code
-                        record.save(update_fields=["billing_number"])
-                    run_in_db_thread(_save_billing)
-
-                self.update_database_state("SUCCESS")
-
-                # ── Step 6: Alert sound + screenshot (only now, after success) ──
-                self.trigger_windows_alerts()
-                self.capture_confirmation_receipt()
-
-                return billing_code
-            else:
-                print("[Final] Billing code pattern not found in confirmation text.")
-                print(f"[Final] Raw text was: {full_text[:300]}")
-                self.update_database_state("MANUAL_REVIEW_NEEDED")
-                return None
-
+            # Wait for the confirmation container to appear
+            self.page.wait_for_selector(".success-container, .billing-info-box, .confirmation-page, .alert-success", timeout=20000)
+            # Now try to locate the billing code
+            # Option 1: look for the label and extract the number from its parent
+            label_selectors = [
+                'text="Kode yo kwishyuriraho"',
+                'text="Kode you kwishyuriraho"',
+                ':has-text("Kode yo kwishyuriraho")',
+                ':has-text("Kode you kwishyuriraho")'
+            ]
+            found = False
+            for sel in label_selectors:
+                try:
+                    label = self.page.locator(sel).first
+                    if label.is_visible():
+                        # Get the parent element and extract text
+                        parent = label.locator("xpath=..")
+                        full_text = parent.inner_text()
+                        match = re.search(r'(88\d+)', full_text)
+                        if match:
+                            billing_code = match.group(1)
+                            found = True
+                            break
+                except:
+                    continue
+            if not found:
+                # Fallback: search the entire page for the pattern
+                body_text = self.page.locator("body").inner_text()
+                matches = re.findall(r'(88\d+)', body_text)
+                if matches:
+                    billing_code = matches[0]  # take the first
         except Exception as e:
-            print(f"[Final] Exception while reading billing confirmation: {e}")
-            self.update_database_state("FAILED")
+            print(f"[Final] Billing code extraction error: {e}")
+
+        if billing_code:
+            print(f"[Final] Billing code captured: {billing_code}")
+            record = self.booking_record
+            if record:
+                def _save_billing():
+                    record.billing_number = billing_code
+                    record.save(update_fields=["billing_number"])
+                run_in_db_thread(_save_billing)
+
+            self.update_database_state("SUCCESS")
+
+            # ── Step 6: Alert sound + screenshot ──────────────────
+            self.trigger_windows_alerts()
+            self.capture_confirmation_receipt()
+
+            # ── Step 7: Keep browser open for 5 minutes ──────────
+            print("[Final] Booking completed. Browser will stay open for 5 minutes before closing.")
+            time.sleep(300)  # 5 minutes
+
+            return billing_code
+        else:
+            print("[Final] Billing code not found.")
+            self.update_database_state("MANUAL_REVIEW_NEEDED")
             return None
 
     def capture_confirmation_receipt(self):
-        """Screenshot the confirmation page and save it to media/receipts/."""
+        """Screenshot the confirmation page."""
         try:
             self.page.wait_for_selector(
                 ".success-container, .billing-info-box, .confirmation-page",

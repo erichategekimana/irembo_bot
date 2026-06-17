@@ -151,8 +151,8 @@ class PollingMixin:
                         billing_id = self.finalize_booking(phone_number=client_phone)
                         if billing_id:
                             print("[Engine] Booking completed successfully. Browser will remain open for inspection.")
-                            print("Press Enter to close the browser and finish the worker thread.")
-                            input()   # Wait for user to press Enter
+                            print("Closing browser in 5 minutes...")
+                            time.sleep(300)
                         return billing_id
                     except Exception as e:
                         print(f"[Engine] Finalization failed after slot secured: {e}")

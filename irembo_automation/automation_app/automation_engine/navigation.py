@@ -40,13 +40,7 @@ class NavigationMixin:
             self._fill_provisional_number(self.booking_record.provisional_number)
 
     def _fill_provisional_number(self, provisional_number):
-        """
-        Locate and fill the provisional licence number field.
-        Tries several known formcontrolname values and a generic text-input
-        fallback, because the attribute name varies across Irembo deployments.
-        Saves a debug screenshot to media/debug/ on failure.
-        """
-        # Known formcontrolname values observed across service variants
+        """Retry up to 15s to find the field before giving up."""
         candidate_selectors = [
             'input[formcontrolname="provisionalLicenseNumberFormControl"]',
             'input[formcontrolname="provisionalNumber"]',
@@ -57,27 +51,34 @@ class NavigationMixin:
             'input[placeholder*="license" i]',
         ]
 
+        start = time.time()
         prov_field = None
-        for selector in candidate_selectors:
-            try:
-                loc = self.page.locator(selector).first
-                loc.wait_for(state="visible", timeout=6000)
-                prov_field = loc
-                print(f"[Engine] Provisional field located via: {selector}")
+        found_selector = None
+
+        while time.time() - start < 15:
+            for selector in candidate_selectors:
+                try:
+                    loc = self.page.locator(selector).first
+                    if loc.is_visible():
+                        prov_field = loc
+                        found_selector = selector
+                        break
+                except:
+                    continue
+            if prov_field:
                 break
-            except Exception:
-                continue  # try next candidate
+            time.sleep(0.5)
 
         if prov_field is None:
-            # Save a debug screenshot so we can inspect the page state
             self._save_debug_screenshot("provisional_field_not_found")
             self._pause_on_error(
-                "Provisional license number field not found. "
+                "Provisional license number field not found after 15s. "
                 "The page may not have loaded correctly after identity verification. "
                 "A debug screenshot has been saved to media/debug/."
             )
             return
 
+        print(f"[Engine] Provisional field located via: {found_selector}")
         prov_field.fill(provisional_number)
         prov_field.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
         prov_field.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
@@ -85,7 +86,7 @@ class NavigationMixin:
 
         print("[Engine] Submitting provisional license details...")
 
-        # Click the search/submit button next to the field
+        # Try to click the search/submit button
         search_btn_selectors = [
             'button:has-text("Shakisha")',
             'button.inline-btn',
@@ -93,15 +94,21 @@ class NavigationMixin:
             'form.ng-valid button.btn-primary',
             'button.btn-primary',
         ]
+        clicked = False
         for btn_selector in search_btn_selectors:
             try:
                 btn = self.page.locator(btn_selector).first
-                btn.wait_for(state="visible", timeout=3000)
-                print(f"[Engine] Clicking search/submit button ({btn_selector})...")
-                btn.click()
-                break
-            except Exception:
+                if btn.is_visible() and not btn.is_disabled():
+                    print(f"[Engine] Clicking search/submit button ({btn_selector})...")
+                    btn.click()
+                    clicked = True
+                    break
+            except:
                 continue
+
+        if not clicked:
+            # Fallback: press Enter in the field
+            prov_field.press("Enter")
 
         time.sleep(2)
         self.check_for_errors()
