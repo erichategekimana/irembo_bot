@@ -37,9 +37,17 @@
                             <label class="block text-sm font-medium text-slate-300 mb-2">Last Name</label>
                             <input type="text" name="last_name" value="{{ app.last_name }}" class="w-full bg-slate-700 border border-slate-600 text-slate-100 px-4 py-2 rounded focus:outline-none focus:border-emerald-500">
                         </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">Phone Number</label>
+                            <input type="text" name="phone_number" value="{{ app.phone_number }}" class="w-full bg-slate-700 border border-slate-600 text-slate-100 px-4 py-2 rounded focus:outline-none focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">Birth Date</label>
+                            <input type="date" name="birth_date" value="{{ app.birth_date|date:'Y-m-d' }}" class="w-full bg-slate-700 border border-slate-600 text-slate-100 px-4 py-2 rounded focus:outline-none focus:border-emerald-500">
+                        </div>
                         <div class="col-span-2">
-                            <label class="block text-sm font-medium text-slate-300 mb-2">National ID (Read-only)</label>
-                            <input type="text" value="{{ app.national_id }}" disabled class="w-full bg-slate-700 border border-slate-600 text-slate-400 px-4 py-2 rounded cursor-not-allowed">
+                            <label class="block text-sm font-medium text-slate-300 mb-2">National ID</label>
+                            <input type="text" name="national_id" value="{{ app.national_id }}" class="w-full bg-slate-700 border border-slate-600 text-slate-100 px-4 py-2 rounded focus:outline-none focus:border-emerald-500">
                         </div>
                         <div class="col-span-2">
                             <label class="block text-sm font-medium text-slate-300 mb-2">Email</label>
@@ -57,8 +65,8 @@
                             <input type="text" name="category" value="{{ app.category }}" placeholder="B" class="w-full bg-slate-700 border border-slate-600 text-slate-100 px-4 py-2 rounded focus:outline-none focus:border-emerald-500">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-slate-300 mb-2">Provisional Number (Read-only)</label>
-                            <input type="text" value="{{ app.provisional_number }}" disabled class="w-full bg-slate-700 border border-slate-600 text-slate-400 px-4 py-2 rounded cursor-not-allowed">
+                            <label class="block text-sm font-medium text-slate-300 mb-2">Provisional Number</label>
+                            <input type="text" name="provisional_number" value="{{ app.provisional_number }}" class="w-full bg-slate-700 border border-slate-600 text-slate-100 px-4 py-2 rounded focus:outline-none focus:border-emerald-500">
                         </div>
                     </div>
                 </div>

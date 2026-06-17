@@ -133,6 +133,13 @@ def edit_application(request, application_id):
             app.first_name = request.POST.get('first_name', app.first_name)
             app.last_name = request.POST.get('last_name', app.last_name)
             app.email = request.POST.get('email', app.email)
+            # Persist additional editable fields so admin/frontend edits actually save
+            app.national_id = request.POST.get('national_id', app.national_id)
+            app.birth_date = request.POST.get('birth_date', app.birth_date)
+            app.phone_number = request.POST.get('phone_number', app.phone_number)
+            app.provisional_number = request.POST.get('provisional_number', app.provisional_number)
+            app.billing_number = request.POST.get('billing_number', app.billing_number)
+            app.application_number = request.POST.get('application_number', app.application_number)
             app.category = request.POST.get('category', app.category)
             app.payment_status = request.POST.get('payment_status', app.payment_status)
             app.status = request.POST.get('status', app.status)
