@@ -87,40 +87,51 @@ class FinalizationMixin:
             return None
 
                 # ── Step 5: Collect billing number ──────────────────────────
-        # First, wait for any element that contains the billing label or a number starting with 88
         billing_code = None
         try:
-            # Wait for the confirmation container to appear
-            self.page.wait_for_selector(".success-container, .billing-info-box, .confirmation-page, .alert-success", timeout=20000)
-            # Now try to locate the billing code
-            # Option 1: look for the label and extract the number from its parent
-            label_selectors = [
-                'text="Kode yo kwishyuriraho"',
-                'text="Kode you kwishyuriraho"',
-                ':has-text("Kode yo kwishyuriraho")',
-                ':has-text("Kode you kwishyuriraho")'
-            ]
-            found = False
-            for sel in label_selectors:
-                try:
-                    label = self.page.locator(sel).first
-                    if label.is_visible():
-                        # Get the parent element and extract text
-                        parent = label.locator("xpath=..")
-                        full_text = parent.inner_text()
-                        match = re.search(r'(88\d+)', full_text)
-                        if match:
-                            billing_code = match.group(1)
-                            found = True
-                            break
-                except:
-                    continue
-            if not found:
-                # Fallback: search the entire page for the pattern
-                body_text = self.page.locator("body").inner_text()
-                matches = re.findall(r'(88\d+)', body_text)
+            # Wait for the final billing page to render.
+            self.page.wait_for_selector(
+                'div.bill-id-container, div.payment-panels, span.inside-title, .payment-card',
+                timeout=30000,
+            )
+
+            # Poll the page for the billing number text.
+            end_time = time.time() + 30
+            while time.time() < end_time:
+                # Primary path: explicit billing container.
+                if self.page.locator('div.bill-id-container').count() > 0:
+                    billing_text = self.page.locator('div.bill-id-container').first.inner_text().strip()
+                    match = re.search(r'\b(88\d{6,})\b', billing_text)
+                    if match:
+                        billing_code = match.group(1)
+                        break
+
+                # Secondary path: payment panel with label and inline number.
+                if self.page.locator('div.payment-panels').count() > 0:
+                    panel_text = self.page.locator('div.payment-panels').first.inner_text().strip()
+                    match = re.search(r'\b(88\d{6,})\b', panel_text)
+                    if match:
+                        billing_code = match.group(1)
+                        break
+
+                # Tertiary path: label + sibling text number.
+                if self.page.locator('span.inside-title:has-text("Kode yo kwishyuriraho")').count() > 0:
+                    parent_text = self.page.locator('span.inside-title:has-text("Kode yo kwishyuriraho")').first.locator('xpath=..').inner_text()
+                    match = re.search(r'\b(88\d{6,})\b', parent_text)
+                    if match:
+                        billing_code = match.group(1)
+                        break
+
+                time.sleep(1)
+
+            if not billing_code:
+                body_text = self.page.locator('body').inner_text()
+                matches = re.findall(r'\b(88\d{6,})\b', body_text)
                 if matches:
-                    billing_code = matches[0]  # take the first
+                    billing_code = matches[0]
+                else:
+                    preview = body_text.replace('\n', ' ')[:400]
+                    print(f"[Final] Billing code still missing; page text snapshot: {preview}")
         except Exception as e:
             print(f"[Final] Billing code extraction error: {e}")
 
@@ -137,6 +148,7 @@ class FinalizationMixin:
 
             # ── Step 6: Alert sound + screenshot ──────────────────
             self.trigger_windows_alerts()
+            print("[Final] Billing code saved and alert triggered.")
             self.capture_confirmation_receipt()
 
             # ── Step 7: Keep browser open for 5 minutes ──────────
@@ -145,7 +157,8 @@ class FinalizationMixin:
 
             return billing_code
         else:
-            print("[Final] Billing code not found.")
+            print("[Final] Billing code not found after confirmation wait.")
+            self.capture_confirmation_receipt()
             self.update_database_state("MANUAL_REVIEW_NEEDED")
             return None
 
