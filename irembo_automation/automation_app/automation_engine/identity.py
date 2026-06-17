@@ -18,21 +18,22 @@ class IdentityMixin:
             self._pause_on_error("Identity verification modal did not appear. National ID may be invalid or session expired.")
         time.sleep(1)
 
+        # Locate the challenge inputs
+        date_input = self.page.locator('input[formcontrolname="birthDateFormControl"]')
         name_input = self.page.locator('input[formcontrolname="nameFormControl"]')
-        date_input = self.page.locator('input[id="datePicker"]')
 
-        print("[Step 8] Waiting for verification challenge fields to render...")
+        print("[Step 8] Waiting for verification challenge field to render...")
         challenge_detected = False
         start_time = time.time()
         while time.time() - start_time < 6.0:
-            if name_input.is_visible() or date_input.is_visible():
+            if date_input.is_visible() or name_input.is_visible():
                 challenge_detected = True
                 break
             time.sleep(0.3)
 
         if not challenge_detected:
             self._pause_on_error(
-                "Verification challenge fields (name or birth date) did not appear inside the modal. "
+                "Verification challenge field (birth date or name) did not appear inside the modal. "
                 "The modal may have changed structure or an unexpected error was shown."
             )
 
@@ -46,31 +47,41 @@ class IdentityMixin:
         else:
             birth_date_str = client_verification_data
 
-        if name_input.is_visible():
-            print(f"[Step 8] Challenge: Name requested. Typing: {first_name}")
-            self._type_into_field(name_input, first_name)
-        elif date_input.is_visible():
+        if date_input.is_visible():
             print(f"[Step 8] Challenge: Birth date requested. Typing: {birth_date_str}")
             self._type_into_field(date_input, birth_date_str)
+            # Dismiss the datepicker overlay to avoid blocking subsequent clicks
+            self.page.keyboard.press("Escape")
+            time.sleep(0.3)
+        elif name_input.is_visible():
+            print(f"[Step 8] Challenge: Name requested. Typing: {first_name}")
+            self._type_into_field(name_input, first_name)
+        else:
+            self._pause_on_error("No visible input field found in verification modal.")
 
         time.sleep(0.5)
 
+        # --- Checkbox handling (improved) ---
         print("[Step 8] Verifying terms checkbox state...")
-        checkbox = self.page.locator('mat-checkbox:has-text("Nemeye") ')
-        checkbox_inner = checkbox.locator('.mat-checkbox-inner-container')
+        # Use the checkbox input directly to avoid overlay interference (still good to have closed datepicker)
+        checkbox_input = self.page.locator('mat-checkbox:has-text("Nemeye") input[type="checkbox"]')
         try:
-            is_checked = "mat-checkbox-checked" in (checkbox.get_attribute("class") or "")
-            if not is_checked:
+            # Wait for it to be enabled and not hidden by overlay (should be fine after Escape)
+            checkbox_input.wait_for(state="visible", timeout=5000)
+            if not checkbox_input.is_checked():
                 print("[Step 8] Terms checkbox is unchecked. Clicking to accept...")
-                checkbox_inner.click()
-                time.sleep(0.5)
+                checkbox_input.check()
             else:
                 print("[Step 8] Terms checkbox already checked. Skipping click.")
         except Exception as e:
-            print(f"[Step 8] Warning: Could not determine checkbox state ({e}). Attempting click anyway...")
-            checkbox_inner.click()
-            time.sleep(0.5)
+            print(f"[Step 8] Warning: Could not interact with checkbox ({e}). Attempting fallback click on container...")
+            # Fallback: click the inner container (original method)
+            container = self.page.locator('mat-checkbox:has-text("Nemeye") .mat-checkbox-inner-container')
+            container.click(force=True)  # force if overlay still exists
 
+        time.sleep(0.5)
+
+        # --- Genzura button ---
         print("[Step 8] Locating 'Genzura' confirmation button...")
         review_btn = self.page.locator('mat-dialog-container button.btn-primary')
 
@@ -93,7 +104,7 @@ class IdentityMixin:
             self.check_for_errors()
             self._pause_on_error(
                 "Verification button ('Genzura') remained disabled after 5s. "
-                "Check that first_name or birth_date in the database record exactly matches the ID document."
+                "Check that the verification data (birth date or name) exactly matches the ID document."
             )
 
         print("[Step 8] Submitting identity verification ('Genzura')...")
