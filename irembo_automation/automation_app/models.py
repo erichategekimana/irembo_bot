@@ -13,11 +13,10 @@ national_id_validator = RegexValidator(
     message="National ID must be exactly 16 digits and contain only numbers."
 )
 
-# Enforces valid Rwandan mobile phone formats (supports 078..., 079..., 072..., 073...)
-# Also allows optional +250 country code prefix
+# Enforces exactly 10 digits for Rwandan mobile phone numbers (e.g., 0788123456)
 rwanda_phone_validator = RegexValidator(
-    regex=r'^(?:\+250|0)7[2389]\d{7}$',
-    message="Phone number must be a valid Rwandan mobile format (e.g., 0788XXXXXX or +250788XXXXXX)."
+    regex=r'^07[2389]\d{7}$',
+    message="Phone number must be exactly 10 digits and start with 07 followed by 8 digits."
 )
 
 
