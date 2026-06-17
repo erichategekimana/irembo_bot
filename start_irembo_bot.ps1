@@ -7,7 +7,7 @@ param(
 )
 
 # Paths
-$VenvPath = Join-Path $ProjectRoot ".venv"
+$VenvPath = Join-Path $ProjectRoot "venv"
 $PythonExe = Join-Path $VenvPath "Scripts\python.exe"
 $ManagePy = Join-Path $ProjectRoot "irembo_automation\manage.py"
 $LogFile = Join-Path $ProjectRoot "logs\server.log"
