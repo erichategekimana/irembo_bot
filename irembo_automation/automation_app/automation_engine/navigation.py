@@ -6,6 +6,7 @@ class NavigationMixin:
     def navigate_to_booking_form(self, national_id, verification_data):
         print(f"[Engine] Navigating to Irembo home page...")
         self.page.goto("https://irembo.gov.rw/", wait_until="networkidle")
+        self.validate_agent_session(self.page) # Log a warning if not valid, but continue anyway to allow manual intervention.
 
         self.page.locator('text="Polisi"').click()
         time.sleep(1)

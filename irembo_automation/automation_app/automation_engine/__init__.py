@@ -7,6 +7,7 @@ from .selectors import SelectorsMixin
 from .polling import PollingMixin
 from .final import FinalizationMixin
 from .utils import UtilsMixin
+from .validator import ValidatorMixin
 
 class IremboAutomationEngine(
     BrowserMixin,
@@ -17,6 +18,7 @@ class IremboAutomationEngine(
     PollingMixin,
     FinalizationMixin,
     UtilsMixin,
+    ValidatorMixin
 ):
     def __init__(self, booking_record=None):
         self.state_file = None  # Will be set in browser init? Or we can set here using config
