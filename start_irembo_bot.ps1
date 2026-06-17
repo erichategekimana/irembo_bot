@@ -2,7 +2,7 @@
 # Service-friendly startup script for Irembo Automation Bot (Windows)
 
 param(
-    [string]$ProjectRoot = "C:\Windows\System32\irembo_bot",
+    [string]$ProjectRoot = "C:\Program Files\irembo_bot",
     [int]$Port = 8000
 )
 
