@@ -249,7 +249,8 @@
                                 item.status === 'SUCCESS' ||
                                 item.status === 'MANUAL_REVIEW_NEEDED'
                             ) {
-                                window.location.reload();
+                                // Do not reload automatically. Keeping the page stable so users can continue working.
+                                // Future improvement: update the badge text automatically without full page reload.
                             }
                         }
                     });
