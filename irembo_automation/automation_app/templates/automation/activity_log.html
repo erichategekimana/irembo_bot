@@ -84,6 +84,16 @@
                                 ⏱️ Updated {{ activity.updated_at|timesince }} ago
                             </p>
                         {% endif %}
+                        {% if activity.last_error %}
+                        <p class="text-rose-300">
+                            <span class="font-semibold">Last Error:</span>
+                            {{ activity.last_error|truncatechars:160 }}
+                        </p>
+                        <p class="text-slate-400">
+                            <span class="font-semibold">Retry Attempts:</span>
+                            {{ activity.retry_attempts }}
+                        </p>
+                        {% endif %}
                     </div>
 
                     <div class="mt-4 flex gap-2">

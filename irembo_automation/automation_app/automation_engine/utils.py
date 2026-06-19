@@ -34,6 +34,32 @@ def sync_db_context():
 
 
 class UtilsMixin:
+    def log_message(self, message, level="INFO"):
+        """
+        Log message to console and append to the database log field for the application.
+        """
+        prefix = f"[{level}]"
+        full_msg = f"{prefix} {message}"
+        print(f"[Engine] {full_msg}")
+        
+        record = self.booking_record
+        if record:
+            from django.utils import timezone
+            from automation_app.models import ClientApplication
+            def _append_log():
+                try:
+                    app = ClientApplication.objects.get(id=record.id)
+                    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+                    new_line = f"[{timestamp}] {full_msg}\n"
+                    if app.log_output:
+                        app.log_output += new_line
+                    else:
+                        app.log_output = new_line
+                    app.save(update_fields=["log_output"])
+                except Exception as e:
+                    print(f"[Engine] Failed to write log to DB: {e}")
+            run_in_db_thread(_append_log)
+
     def _pause_on_error(self, reason):
         print(f"[Engine PAUSED] {reason}")
         if self.booking_record:

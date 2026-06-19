@@ -10,4 +10,5 @@ urlpatterns = [
     path('bulk-action/', views.bulk_action, name='bulk_action'),
     path('start/<int:application_id>/', views.start_automation, name='start_automation'),
     path('api/status/', views.api_status_feed, name='api_status_feed'),
+    path('api/logs/<int:application_id>/', views.api_application_logs, name='api_application_logs'),
 ]

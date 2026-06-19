@@ -1,4 +1,5 @@
 import threading
+import time
 from datetime import timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
@@ -13,38 +14,117 @@ from automation_app.automation_engine.utils import run_in_db_thread
 from playwright.sync_api import sync_playwright  # type: ignore[import]
 
 def run_automation_worker(application_id):
-    def _set_processing():
-        app = ClientApplication.objects.get(id=application_id)
-        app.status = ClientApplication.ProcessStatus.PROCESSING
-        app.save(update_fields=["status"])
-        return app
+    max_attempts = 3
 
-    application = run_in_db_thread(_set_processing)
-
-    try:
-        with sync_playwright() as p:
-            engine = IremboAutomationEngine(booking_record=application)
-            engine.initialize_stealth_browser(p, headless=False)
-            engine.navigate_to_booking_form(
-                national_id=application.national_id,
-                verification_data=application.first_name
-            )
-            billing_id = engine.start_slot_polling()
-            print(f"[Worker Thread] Process completed cleanly for ID {application.national_id}. Code: {billing_id}")
-
-    except Exception as e:
-        print(f"[Worker Thread Error] Execution failed for application {application_id}: {str(e)}")
-
-        def _mark_failed():
+    # Initialize log_output and ensure starting state
+    def _init_run():
+        try:
             app = ClientApplication.objects.get(id=application_id)
-            if app.status not in [
-                ClientApplication.ProcessStatus.SUCCESS,
-                ClientApplication.ProcessStatus.CANCELED,
-            ]:
-                app.status = ClientApplication.ProcessStatus.FAILED
-                app.save(update_fields=["status"])
+            app.status = ClientApplication.ProcessStatus.PROCESSING
+            app.retry_attempts = 0
+            app.last_error = None
+            timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+            app.log_output = f"[{timestamp}] [INFO] Starting automation process...\n"
+            app.save()
+            return app
+        except ClientApplication.DoesNotExist:
+            return None
 
-        run_in_db_thread(_mark_failed)
+    application = run_in_db_thread(_init_run)
+    if not application:
+        print(f"[Worker Thread Error] Application {application_id} does not exist. Aborting.")
+        return
+
+    for attempt in range(1, max_attempts + 1):
+        # Check if the application was canceled or deleted in between attempts
+        def _check_cancelled_or_deleted():
+            try:
+                app = ClientApplication.objects.get(id=application_id)
+                # If already completed successfully or manually reviewed, don't run again.
+                if app.status in [
+                    ClientApplication.ProcessStatus.SUCCESS,
+                    ClientApplication.ProcessStatus.CANCELED,
+                    ClientApplication.ProcessStatus.MANUAL_REVIEW_NEEDED
+                ]:
+                    return app, True
+                return app, False
+            except ClientApplication.DoesNotExist:
+                return None, True
+
+        app_instance, should_abort = run_in_db_thread(_check_cancelled_or_deleted)
+        if should_abort:
+            msg = f"Application {application_id} state changed or deleted. Aborting retries."
+            print(f"[Worker Thread] {msg}")
+            return
+
+        def _log_attempt_start():
+            app = ClientApplication.objects.get(id=application_id)
+            app.status = ClientApplication.ProcessStatus.PROCESSING
+            timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+            app.log_output += f"[{timestamp}] [INFO] Starting attempt {attempt} of {max_attempts}...\n"
+            app.save(update_fields=["status", "log_output"])
+            return app
+
+        application = run_in_db_thread(_log_attempt_start)
+
+        try:
+            with sync_playwright() as p:
+                engine = IremboAutomationEngine(booking_record=application)
+                engine.initialize_stealth_browser(p, headless=False)
+                engine.navigate_to_booking_form(
+                    national_id=application.national_id,
+                    verification_data=application.first_name
+                )
+                billing_id = engine.start_slot_polling()
+                
+                # Check status inside the DB in case slot secured & successfully completed
+                def _get_final_status():
+                    app = ClientApplication.objects.get(id=application_id)
+                    return app.status, app.billing_number
+                
+                final_status, final_billing = run_in_db_thread(_get_final_status)
+                
+                if final_status in [ClientApplication.ProcessStatus.SUCCESS, ClientApplication.ProcessStatus.MANUAL_REVIEW_NEEDED] or final_billing:
+                    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+                    def _log_success():
+                        app = ClientApplication.objects.get(id=application_id)
+                        app.log_output += f"[{timestamp}] [INFO] Process completed successfully. Billing Code: {final_billing or 'N/A'}\n"
+                        app.save(update_fields=["log_output"])
+                    run_in_db_thread(_log_success)
+                    print(f"[Worker Thread] Process completed cleanly for ID {application.national_id}. Billing Code: {final_billing}")
+                    break  # Success! Exit retry loop
+                else:
+                    raise Exception("Slot polling finished without securing a billing code.")
+
+        except Exception as e:
+            error_message = str(e)
+            error_details = f"{type(e).__name__}: {error_message}"
+            print(f"[Worker Thread Error] Attempt {attempt} failed for application {application_id}: {error_details}")
+
+            def _log_attempt_failure():
+                app = ClientApplication.objects.get(id=application_id)
+                if app.status not in [
+                    ClientApplication.ProcessStatus.SUCCESS,
+                    ClientApplication.ProcessStatus.CANCELED,
+                ]:
+                    app.retry_attempts = attempt
+                    app.last_error = error_details
+                    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+                    app.log_output += f"[{timestamp}] [ERROR] Attempt {attempt} failed: {error_details}\n"
+                    
+                    if attempt >= max_attempts:
+                        app.status = ClientApplication.ProcessStatus.FAILED
+                        app.log_output += f"[{timestamp}] [ERROR] All {max_attempts} attempts failed. Stopping.\n"
+                    else:
+                        app.status = ClientApplication.ProcessStatus.FAILED  # Update status so dashboard shows FAILED between retries
+                        app.log_output += f"[{timestamp}] [WARNING] Attempt {attempt} failed. Retrying in 10 seconds...\n"
+                    
+                    app.save(update_fields=["status", "retry_attempts", "last_error", "log_output"])
+            
+            run_in_db_thread(_log_attempt_failure)
+
+            if attempt < max_attempts:
+                time.sleep(10)
 
 def dashboard(request):
     """Renders the central monitoring dashboard panel grid with search, filter, and sort."""
@@ -218,8 +298,18 @@ def start_automation(request, application_id):
 
 def api_status_feed(request):
     """Asynchronous JSON polling feed utilized by dashboard JavaScript tickers."""
-    applications_data = list(ClientApplication.objects.values('id', 'status', 'billing_number'))
+    applications_data = list(ClientApplication.objects.values(
+        'id', 'status', 'billing_number', 'retry_attempts', 'last_error'
+    ))
     return JsonResponse({'applications': applications_data})
+
+def api_application_logs(request, application_id):
+    """Asynchronous JSON polling feed for detailed application logs."""
+    app = get_object_or_404(ClientApplication, id=application_id)
+    return JsonResponse({
+        'log_output': app.log_output or 'No logs available yet.',
+        'status': app.status,
+    })
 
 def activity_log(request):
     """Display recent activities from the past 3 months."""

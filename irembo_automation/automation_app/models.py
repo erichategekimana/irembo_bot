@@ -81,6 +81,9 @@ class ClientApplication(models.Model):
     # Handshake & Output Fields
     billing_number = models.CharField(max_length=50, blank=True, null=True)
     application_number = models.CharField(max_length=50, blank=True, null=True)
+    retry_attempts = models.PositiveIntegerField(default=0)
+    last_error = models.TextField(blank=True, null=True)
+    log_output = models.TextField(blank=True, null=True, help_text="Detailed execution logs for the application task")
 
     # Metadata Audit Trail
     created_at = models.DateTimeField(auto_now_add=True)

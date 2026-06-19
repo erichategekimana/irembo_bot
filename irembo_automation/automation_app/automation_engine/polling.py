@@ -91,51 +91,56 @@ class PollingMixin:
         return False
 
     def start_slot_polling(self, target_center="BUSANZA AUTOMATED CENTER"):
-        print("[Engine] Polling engine activated. Monitoring availability maps...")
+        self.log_message("Polling engine activated. Monitoring availability maps...")
 
         # 1. Select category
         if self.booking_record and self.booking_record.category:
-            print(f"[Engine] Setting category selection to: {self.booking_record.category}")
+            self.log_message(f"Setting category selection to: {self.booking_record.category}")
             category_control = "categoryFormControl"
             if not self.page.locator(f'ng-select[formcontrolname="{category_control}"]').is_visible():
                 category_control = "licenseCategoryFormControl"
             self.set_angular_dropdown(category_control, self.booking_record.category)
         else:
-            print("[Warning] No target category specified. Skipping.")
+            self.log_message("No target category specified. Skipping.", level="WARNING")
 
         # 2. Select district
         district_control = "locationFormControl"
         if not self.page.locator(f'ng-select[formcontrolname="{district_control}"]').is_visible():
             district_control = "districtFormControl"
 
-        print(f"[Engine] Setting district selection (using control: {district_control}) to Kicukiro...")
+        self.log_message(f"Setting district selection (using control: {district_control}) to Kicukiro...")
         self.set_angular_dropdown(district_control, "Kicukiro")
 
         # 3. Get available time options
         time_options = self._get_time_options()
         if not time_options:
-            print("[Error] No time options found. Aborting.")
+            self.log_message("No time options found. Aborting.", level="ERROR")
             return None
 
         time_index = 0
+        consecutive_errors = 0
 
         while True:
             try:
+                # Check page closure before starting the iteration
+                if self.page is None or self.page.is_closed():
+                    raise Exception("Browser page is closed.")
+
                 # Select the current time
-                print(f"[Engine] Selecting time slot: {time_options[time_index]} (index {time_index})")
+                self.log_message(f"Selecting time slot: {time_options[time_index]} (index {time_index})")
                 if not self._select_time_slot_by_index(time_index):
                     # If selection fails, increment and try next
                     time_index += 1
                     if time_index >= len(time_options):
                         # All times exhausted – toggle district
-                        print("[Engine] All time slots exhausted. Toggling district to refresh...")
+                        self.log_message("All time slots exhausted. Toggling district to refresh...")
                         self.set_angular_dropdown(district_control, "Gasabo")
                         time.sleep(random.uniform(1.2, 2.5))
                         self.set_angular_dropdown(district_control, "Kicukiro")
                         time.sleep(random.uniform(1.2, 2.5))
                         time_options = self._get_time_options()
                         if not time_options:
-                            print("[Error] No time options after district toggle. Waiting and retrying...")
+                            self.log_message("No time options after district toggle. Waiting and retrying...", level="WARNING")
                             time.sleep(5)
                             continue
                         time_index = 0
@@ -145,32 +150,34 @@ class PollingMixin:
                 slot_secured = self.evaluate_and_select_slot(target_center=target_center)
 
                 if slot_secured:
-                    print(f"[Engine] Slot secured at {target_center}! Proceeding to finalization...")
+                    self.log_message(f"Slot secured at {target_center}! Proceeding to finalization...")
                     try:
                         client_phone = self.booking_record.phone_number if self.booking_record else "0780000000"
                         billing_id = self.finalize_booking(phone_number=client_phone)
                         if billing_id:
-                            print("[Engine] Booking completed successfully. Browser will remain open for inspection.")
-                            print("Closing browser in 5 minutes...")
+                            self.log_message("Booking completed successfully. Browser will remain open for inspection.")
+                            self.log_message("Closing browser in 5 minutes...")
                             time.sleep(300)
                         return billing_id
                     except Exception as e:
-                        print(f"[Engine] Finalization failed after slot secured: {e}")
-                        # Optionally pause here too for debugging
-                        return None
+                        self.log_message(f"Finalization failed after slot secured: {e}", level="ERROR")
+                        raise e
+
+                # Reset consecutive errors since loop made progress
+                consecutive_errors = 0
 
                 # No slot found – move to next time
                 time_index += 1
                 if time_index >= len(time_options):
                     # All times exhausted – toggle district to refresh
-                    print("[Engine] All time slots exhausted. Toggling district to refresh...")
+                    self.log_message("All time slots exhausted. Toggling district to refresh...")
                     self.set_angular_dropdown(district_control, "Gasabo")
                     time.sleep(random.uniform(1.2, 2.5))
                     self.set_angular_dropdown(district_control, "Kicukiro")
                     time.sleep(random.uniform(1.2, 2.5))
                     time_options = self._get_time_options()
                     if not time_options:
-                        print("[Error] No time options after district toggle. Waiting and retrying...")
+                        self.log_message("No time options after district toggle. Waiting and retrying...", level="WARNING")
                         time.sleep(5)
                         continue
                     time_index = 0
@@ -179,9 +186,19 @@ class PollingMixin:
                 time.sleep(random.uniform(1.0, 2.0))
 
             except InterruptedError as ie:
-                print(f"[Engine] Shutting down polling gracefully: {ie}")
+                self.log_message(f"Shutting down polling gracefully: {ie}")
                 break
             except Exception as e:
-                print(f"[Engine] Exception in polling loop: {str(e)}")
-                # On unexpected error, wait and continue (but we might be stuck)
+                consecutive_errors += 1
+                self.log_message(f"Exception in polling loop: {str(e)}", level="WARNING")
+                
+                # Check for critical closure conditions
+                if self.page is None or self.page.is_closed() or not self.browser or not self.browser.is_connected():
+                    self.log_message("Browser page closed or disconnected. Aborting polling loop.", level="ERROR")
+                    raise e
+                
+                if consecutive_errors >= 5:
+                    self.log_message("Exceeded maximum consecutive polling loop exceptions. Propagating failure.", level="ERROR")
+                    raise e
+                
                 time.sleep(5)

@@ -21,7 +21,7 @@ class FinalizationMixin:
         Complete the application after the slot has been locked.
         Called immediately after evaluate_and_select_slot() returns True.
         """
-        print(f"[Final] Starting finalization for phone: {phone_number}")
+        self.log_message(f"Starting finalization for phone: {phone_number}")
 
         # ── Step 1: Select phone number notification channel ─────────────────
         try:
@@ -31,7 +31,7 @@ class FinalizationMixin:
                 phone_checkbox.click()
                 time.sleep(0.4)
         except Exception as e:
-            print(f"[Final] Phone channel checkbox not found or already selected: {e}")
+            self.log_message(f"Phone channel checkbox not found or already selected: {e}", level="WARNING")
 
         # ── Step 2: Fill in the phone number ─────────────────────────────────
         try:
@@ -41,9 +41,9 @@ class FinalizationMixin:
             phone_input.wait_for(state="visible", timeout=8000)
             phone_input.fill(phone_number)
             time.sleep(0.3)
-            print(f"[Final] Phone number entered: {phone_number}")
+            self.log_message(f"Phone number entered: {phone_number}")
         except Exception as e:
-            print(f"[Final] Could not fill phone number field: {e}")
+            self.log_message(f"Could not fill phone number field: {e}", level="WARNING")
 
         # ── Step 3: Accept the "info is correct" terms checkbox ───────────────
         exact_terms = "Nemeje ko amakuru yose natanze ahangaha ari ukuri kandi ajyanye n'igihe."
@@ -54,17 +54,17 @@ class FinalizationMixin:
             terms_box.wait_for(state="visible", timeout=8000)
             terms_box.click()
             time.sleep(0.4)
-            print("[Final] Terms checkbox accepted.")
+            self.log_message("Terms checkbox accepted.")
         except Exception as e:
             # Fallback — try any unchecked checkbox near the bottom of the form
-            print(f"[Final] Terms checkbox primary locator failed ({e}). Trying fallback...")
+            self.log_message(f"Terms checkbox primary locator failed ({e}). Trying fallback...", level="WARNING")
             try:
                 fallback = self.page.locator('mat-checkbox input[type="checkbox"]').last
                 if not fallback.is_checked():
                     fallback.check()
                     time.sleep(0.4)
             except Exception as fe:
-                print(f"[Final] Fallback checkbox also failed: {fe}")
+                self.log_message(f"Fallback checkbox also failed: {fe}", level="WARNING")
 
         # ── Step 4: Submit the application ────────────────────────────────────
         try:
@@ -80,9 +80,9 @@ class FinalizationMixin:
             else:
                 raise Exception("Submit button remained disabled after 10 seconds.")
             submit_btn.click()
-            print("[Final] Application submitted. Waiting for confirmation page...")
+            self.log_message("Application submitted. Waiting for confirmation page...")
         except Exception as e:
-            print(f"[Final] Submit button error: {e}")
+            self.log_message(f"Submit button error: {e}", level="ERROR")
             self.update_database_state("FAILED")
             return None
 
@@ -131,12 +131,12 @@ class FinalizationMixin:
                     billing_code = matches[0]
                 else:
                     preview = body_text.replace('\n', ' ')[:400]
-                    print(f"[Final] Billing code still missing; page text snapshot: {preview}")
+                    self.log_message(f"Billing code still missing; page text snapshot: {preview}", level="WARNING")
         except Exception as e:
-            print(f"[Final] Billing code extraction error: {e}")
+            self.log_message(f"Billing code extraction error: {e}", level="ERROR")
 
         if billing_code:
-            print(f"[Final] Billing code captured: {billing_code}")
+            self.log_message(f"Billing code captured: {billing_code}")
             record = self.booking_record
             if record:
                 def _save_billing():
@@ -148,16 +148,16 @@ class FinalizationMixin:
 
             # ── Step 6: Alert sound + screenshot ──────────────────
             self.trigger_windows_alerts()
-            print("[Final] Billing code saved and alert triggered.")
+            self.log_message("Billing code saved and alert triggered.")
             self.capture_confirmation_receipt()
 
             # ── Step 7: Keep browser open for 5 minutes ──────────
-            print("[Final] Booking completed. Browser will stay open for 5 minutes before closing.")
+            self.log_message("Booking completed. Browser will stay open for 5 minutes before closing.")
             time.sleep(300)  # 5 minutes
 
             return billing_code
         else:
-            print("[Final] Billing code not found after confirmation wait.")
+            self.log_message("Billing code not found after confirmation wait.", level="ERROR")
             self.capture_confirmation_receipt()
             self.update_database_state("MANUAL_REVIEW_NEEDED")
             return None
@@ -178,8 +178,8 @@ class FinalizationMixin:
 
             screenshot_path = os.path.join(media_dir, filename)
             self.page.screenshot(path=screenshot_path, full_page=True)
-            print(f"[Final] Receipt saved: {screenshot_path}")
+            self.log_message(f"Receipt saved: {screenshot_path}")
             return filename
         except Exception as e:
-            print(f"[Final] Screenshot capture failed: {e}")
+            self.log_message(f"Screenshot capture failed: {e}", level="ERROR")
             return None
