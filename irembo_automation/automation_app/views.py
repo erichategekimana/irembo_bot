@@ -114,10 +114,6 @@ def _run_automation_worker_locked(application_id):
                     run_in_db_thread(_log_success)
                     print(f"[Worker Thread] Process completed cleanly for ID {application.national_id}. Billing Code: {final_billing}")
                     
-                    if engine.context:
-                        from automation_app.automation_engine.utils import save_session_state
-                        save_session_state(engine.context)
-                        
                     break  # Success! Exit retry loop
                 else:
                     raise Exception("Slot polling finished without securing a billing code.")
@@ -430,9 +426,6 @@ def open_session_manager_thread(lock):
             )
             Stealth().apply_stealth_sync(context)
             
-            from automation_app.automation_engine.utils import load_session_state, save_session_state
-            load_session_state(context)
-            
             if len(context.pages) > 0:
                 page = context.pages[0]
             else:
@@ -440,20 +433,13 @@ def open_session_manager_thread(lock):
                 
             page.goto("https://irembo.gov.rw/", wait_until="networkidle")
             
-            # Thread-safe periodic backup: waits 2 seconds between saves without crashing greenlet
-            start_time = time.time()
-            while time.time() - start_time < 300: # 5 minutes max
-                try:
-                    if page.is_closed():
-                        break
-                    page.wait_for_timeout(2000) # Let playwright run its event loop
-                    if not page.is_closed():
-                        save_session_state(context)
-                except Exception:
-                    break
+            # Wait until the user closes the window or 5 minutes pass
+            try:
+                page.wait_for_event("close", timeout=300000)
+            except Exception:
+                pass # Timeout or already closed
                     
             try:
-                save_session_state(context)
                 context.close()
             except Exception:
                 pass
