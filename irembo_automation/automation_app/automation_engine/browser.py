@@ -40,9 +40,13 @@ class BrowserMixin:
             Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
         """)
 
-        if len(self.context.pages) > 0:
-            self.page = self.context.pages[0]
-        else:
-            self.page = self.context.new_page()
+        # Create a fresh tab to avoid stale DOM from restored sessions
+        self.page = self.context.new_page()
+        # Close all other restored tabs to clean up the UI
+        for p in self.context.pages[:-1]:
+            try:
+                p.close()
+            except Exception:
+                pass
             
         self.context.route("**/*", lambda route: self._intercept_resources(route))

@@ -426,10 +426,14 @@ def open_session_manager_thread(lock):
             )
             Stealth().apply_stealth_sync(context)
             
-            if len(context.pages) > 0:
-                page = context.pages[0]
-            else:
-                page = context.new_page()
+            # Create a fresh tab to avoid stale DOM from restored sessions
+            page = context.new_page()
+            # Close all other restored tabs to clean up the UI
+            for p in context.pages[:-1]:
+                try:
+                    p.close()
+                except Exception:
+                    pass
                 
             page.goto("https://irembo.gov.rw/", wait_until="networkidle")
             
