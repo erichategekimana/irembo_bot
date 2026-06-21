@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Irembo Automation Chrome Data
+chrome_profile/
+state.json

@@ -15,6 +15,9 @@ from .config import (
 
 class BrowserMixin:
     def initialize_stealth_browser(self, p, headless=True):
+        from .utils import kill_browser_processes
+        kill_browser_processes(self.user_data_dir)
+
         print(f"[Engine] Launching persistent Chrome profile at: {self.user_data_dir}")
         self.context = p.chromium.launch_persistent_context(
             user_data_dir=self.user_data_dir,

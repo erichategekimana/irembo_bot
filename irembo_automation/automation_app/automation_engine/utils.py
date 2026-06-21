@@ -1,8 +1,44 @@
 # automation_app/automation_engine/utils.py
 import sys
 import time
+import os
+import signal
 import concurrent.futures
 from contextlib import contextmanager
+
+def kill_browser_processes(user_data_dir):
+    """
+    Search /proc for any chromium/chrome processes running with this specific user_data_dir as an argument, and kill them.
+    This safely prevents 'Failed to create a ProcessSingleton' errors caused by orphaned/stale chromium processes.
+    """
+    if not sys.platform.startswith('linux'):
+        return
+
+    abs_dir = os.path.abspath(user_data_dir)
+    my_pid = os.getpid()
+
+    try:
+        pids = [int(p) for p in os.listdir('/proc') if p.isdigit()]
+    except Exception as e:
+        print(f"[Engine] Could not list /proc: {e}")
+        return
+
+    for pid in pids:
+        if pid == my_pid:
+            continue
+        try:
+            with open(os.path.join('/proc', str(pid), 'cmdline'), 'rb') as f:
+                cmdline = f.read()
+            # cmdline is null-separated bytes. Convert to string safely.
+            cmdline_str = cmdline.decode('utf-8', errors='ignore')
+            # Check if this process belongs to chromium and uses our user_data_dir
+            if ('chrome' in cmdline_str.lower() or 'chromium' in cmdline_str.lower()) and abs_dir in cmdline_str:
+                print(f"[Engine] Killing stale browser process {pid} using profile {abs_dir}")
+                os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, FileNotFoundError):
+            continue
+        except Exception as e:
+            print(f"[Engine] Error checking process {pid}: {e}")
 
 class AbortTaskException(Exception):
     """Exception raised when an automation task needs to be completely aborted and cancelled (e.g., when falling back to manual login)."""

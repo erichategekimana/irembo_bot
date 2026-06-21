@@ -1,5 +1,8 @@
 import threading
 import time
+
+# Global lock to prevent concurrent Playwright browser access to the persistent profile
+browser_lock = threading.Lock()
 from datetime import timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
@@ -14,6 +17,23 @@ from automation_app.automation_engine.utils import run_in_db_thread, AbortTaskEx
 from playwright.sync_api import sync_playwright  # type: ignore[import]
 
 def run_automation_worker(application_id):
+    def _log_waiting():
+        try:
+            app = ClientApplication.objects.get(id=application_id)
+            if app.status not in [ClientApplication.ProcessStatus.SUCCESS, ClientApplication.ProcessStatus.CANCELED, ClientApplication.ProcessStatus.MANUAL_REVIEW_NEEDED]:
+                app.status = ClientApplication.ProcessStatus.PROCESSING
+                timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+                log_msg = f"[{timestamp}] [INFO] Queued: Waiting for browser profile to become available...\n"
+                app.log_output = (app.log_output or "") + log_msg
+                app.save(update_fields=["status", "log_output"])
+        except Exception:
+            pass
+    run_in_db_thread(_log_waiting)
+    
+    with browser_lock:
+        _run_automation_worker_locked(application_id)
+
+def _run_automation_worker_locked(application_id):
     max_attempts = 3
 
     # Initialize log_output and ensure starting state
@@ -377,7 +397,7 @@ def api_respond_session(request, application_id):
     return JsonResponse({'error': 'Invalid action'}, status=400)
 
 
-def open_session_manager_thread():
+def open_session_manager_thread(lock):
     try:
         from playwright.sync_api import sync_playwright
         from automation_app.automation_engine.config import (
@@ -386,6 +406,9 @@ def open_session_manager_thread():
             DEFAULT_LOCALE, DEFAULT_TIMEZONE
         )
         from playwright_stealth import Stealth
+        from automation_app.automation_engine.utils import kill_browser_processes
+
+        kill_browser_processes(USER_DATA_DIR_PATH)
 
         with sync_playwright() as p:
             context = p.chromium.launch_persistent_context(
@@ -418,12 +441,20 @@ def open_session_manager_thread():
             context.close()
     except Exception as e:
         print(f"[Session Manager] Failed to open: {e}")
+    finally:
+        lock.release()
 
 @csrf_exempt
 @require_POST
 def manage_session(request):
     """Spawns a thread to open the persistent Chrome profile for manual session management."""
-    worker_thread = threading.Thread(target=open_session_manager_thread)
+    if not browser_lock.acquire(blocking=False):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Browser is currently in use by an active automation worker. Please wait or abort the task.'
+        }, status=409)
+        
+    worker_thread = threading.Thread(target=open_session_manager_thread, args=(browser_lock,))
     worker_thread.daemon = True
     worker_thread.start()
     return JsonResponse({'status': 'opened'})
