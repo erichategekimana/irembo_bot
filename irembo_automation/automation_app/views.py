@@ -250,6 +250,7 @@ def edit_application(request, application_id):
             app.category = request.POST.get('category', app.category)
             app.payment_status = request.POST.get('payment_status', app.payment_status)
             app.status = request.POST.get('status', app.status)
+            app.comment = request.POST.get('comment', app.comment)
             app.full_clean()
             app.save()
             messages.success(request, 'Application updated successfully')
@@ -326,7 +327,7 @@ def start_automation(request, application_id):
 def api_status_feed(request):
     """Asynchronous JSON polling feed utilized by dashboard JavaScript tickers."""
     applications_data = list(ClientApplication.objects.values(
-        'id', 'status', 'billing_number', 'retry_attempts', 'last_error', 'user_response'
+        'id', 'status', 'billing_number', 'retry_attempts', 'last_error', 'user_response', 'comment'
     ))
     return JsonResponse({'applications': applications_data})
 
@@ -336,6 +337,7 @@ def api_application_logs(request, application_id):
     return JsonResponse({
         'log_output': app.log_output or 'No logs available yet.',
         'status': app.status,
+        'failure_reason': app.failure_reason,
     })
 
 def activity_log(request):

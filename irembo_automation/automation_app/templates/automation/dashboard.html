@@ -183,7 +183,7 @@
                             <th class="p-4">Engine Pipeline Status</th>
                             <th class="p-4">Payment</th>
                             <th class="p-4">Actions</th>
-                            <th class="p-4">Error / Attempts</th>
+                            <th class="p-4">Comment</th>
                             <th class="p-4">Billing Reference</th>
                         </tr>
                     </thead>
@@ -240,11 +240,9 @@
                                     📄 Logs
                                 </button>
                             </td>
-                            <td class="p-4 text-sm text-slate-700 dark:text-slate-300" id="error-container-{{ app.id }}">
-                                {% if app.last_error %}
-                                    <div class="font-semibold text-rose-300">Failed</div>
-                                    <div class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[220px]">{{ app.last_error|truncatechars:80 }}</div>
-                                    <div class="mt-1 text-[11px] text-slate-400 dark:text-slate-500">Attempts: {{ app.retry_attempts }}</div>
+                            <td class="p-4 text-sm text-slate-700 dark:text-slate-300" id="comment-container-{{ app.id }}">
+                                {% if app.comment %}
+                                    <div class="text-xs text-slate-600 dark:text-slate-300 italic truncate max-w-[200px]" title="{{ app.comment }}">{{ app.comment }}</div>
                                 {% else %}
                                     <div class="text-slate-400 dark:text-slate-500">—</div>
                                 {% endif %}
@@ -406,16 +404,14 @@
                             billingCell.innerText = item.billing_number;
                         }
 
-                        const errorCell = document.getElementById(`error-container-${item.id}`);
-                        if (errorCell) {
-                            if (item.last_error) {
-                                errorCell.innerHTML = `
-                                    <div class="font-semibold text-rose-300">Failed</div>
-                                    <div class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[220px]">${item.last_error}</div>
-                                    <div class="mt-1 text-[11px] text-slate-400 dark:text-slate-500">Attempts: ${item.retry_attempts}</div>
+                        const commentCell = document.getElementById(`comment-container-${item.id}`);
+                        if (commentCell) {
+                            if (item.comment) {
+                                commentCell.innerHTML = `
+                                    <div class="text-xs text-slate-600 dark:text-slate-300 italic truncate max-w-[200px]" title="${item.comment}">${item.comment}</div>
                                 `;
                             } else {
-                                errorCell.innerHTML = '<div class="text-slate-400 dark:text-slate-500">—</div>';
+                                commentCell.innerHTML = '<div class="text-slate-400 dark:text-slate-500">—</div>';
                             }
                         }
 
@@ -496,95 +492,46 @@
             }
 
             const lines = rawLogs.split('\n');
-            let html = '<div class="space-y-4">';
-
-            let errorsList = [];
-            let stepsList = [];
+            let html = '<div class="space-y-3 py-2">';
+            let attemptsHtml = '';
 
             lines.forEach(line => {
                 if (!line.trim()) return;
 
-                // Skip traceback details or python internal lines to keep it non-technical
-                if (line.includes('Traceback') || line.startsWith('  File ') || line.startsWith('    ') || line.includes('During handling') || line.startsWith('Call log:') || line.startsWith('  - ') || line.includes('TimeoutError:') || line.startsWith('ValueError:')) {
-                    return;
-                }
-
-                // Regex to parse timestamp, level, and message e.g. [2026-06-19 16:06:44] [INFO] message
                 const match = line.match(/^\[[^\]]+\]\s+\[([A-Z]+)\]\s+(.*)$/);
                 if (match) {
-                    const level = match[1];
                     let msg = match[2];
 
-                    if (level === 'ERROR') {
-                        errorsList.push(msg);
-                    } else if (level === 'WARNING') {
-                        stepsList.push({ type: 'warning', msg: msg });
-                    } else {
-                        stepsList.push({ type: 'info', msg: msg });
-                    }
-                } else {
-                    if (line.toLowerCase().includes('error') || line.toLowerCase().includes('failed')) {
-                        errorsList.push(line);
-                    } else {
-                        stepsList.push({ type: 'info', msg: line });
+                    if (msg.startsWith('Attempt') && msg.includes('failed:')) {
+                        attemptsHtml += `
+                            <div class="p-4 rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 text-rose-800 dark:text-rose-300 font-medium text-sm flex items-start gap-3">
+                                <span class="text-rose-500">❌</span>
+                                <span>${msg}</span>
+                            </div>
+                        `;
+                    } else if (msg.includes('Process completed successfully')) {
+                        attemptsHtml += `
+                            <div class="p-4 rounded-lg border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 font-medium text-sm flex items-start gap-3">
+                                <span class="text-emerald-500">✅</span>
+                                <span>${msg}</span>
+                            </div>
+                        `;
+                    } else if (msg.includes('attempts failed. Stopping.')) {
+                        attemptsHtml += `
+                            <div class="p-4 rounded-lg border border-red-300 dark:border-red-800 bg-red-100 dark:bg-red-900/40 text-red-900 dark:text-red-200 font-bold text-sm flex items-start gap-3">
+                                <span class="text-red-600">🛑</span>
+                                <span>${msg}</span>
+                            </div>
+                        `;
                     }
                 }
             });
 
-            // 1. Render Latest Error prominently at the top
-            if (errorsList.length > 0) {
-                const latestError = errorsList[errorsList.length - 1];
-                html += `
-                    <div class="bg-rose-100 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800/40 rounded-xl p-5 text-rose-900 dark:text-rose-200 mb-6 flex items-start gap-4 shadow-sm">
-                        <div class="w-8 h-8 rounded-full bg-rose-200 dark:bg-rose-900/50 flex items-center justify-center text-rose-700 dark:text-rose-300 font-bold shrink-0">⚠️</div>
-                        <div>
-                            <div class="text-xs uppercase font-bold tracking-wider text-rose-700 dark:text-rose-400">Application Error Info</div>
-                            <p class="text-sm mt-1 font-medium leading-relaxed">${latestError}</p>
-                        </div>
-                    </div>
-                `;
+            if (!attemptsHtml) {
+                attemptsHtml = '<div class="text-slate-500 dark:text-slate-400 text-sm text-center py-8">Process is running. Waiting for attempt results...</div>';
             }
 
-            // 2. Render Timeline Steps
-            if (stepsList.length > 0) {
-                html += '<div class="border-l border-slate-200 dark:border-slate-800 ml-3.5 pl-6 space-y-4 relative">';
-                stepsList.forEach(step => {
-                    let iconColor = 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700';
-                    let iconText = '○';
-                    let textColor = 'text-slate-600 dark:text-slate-350';
-                    
-                    if (step.type === 'warning') {
-                        iconColor = 'bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-800/40';
-                        iconText = '⚠';
-                        textColor = 'text-amber-800 dark:text-amber-200/90';
-                    } else if (step.msg.toLowerCase().includes('success') || step.msg.toLowerCase().includes('complete')) {
-                        iconColor = 'bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-800/40';
-                        iconText = '✓';
-                        textColor = 'text-emerald-800 dark:text-emerald-300';
-                    } else if (step.msg.toLowerCase().includes('starting attempt')) {
-                        iconColor = 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-800/40';
-                        iconText = '➜';
-                        textColor = 'text-blue-800 dark:text-blue-300 font-semibold';
-                    } else {
-                        iconColor = 'bg-slate-200 dark:bg-slate-900 text-slate-700 dark:text-emerald-500 border border-slate-300 dark:border-slate-800';
-                        iconText = '✓';
-                    }
-
-                    html += `
-                        <div class="relative flex items-start gap-3">
-                            <span class="absolute -left-[37px] top-0.5 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${iconColor}">
-                                ${iconText}
-                            </span>
-                            <div>
-                                <p class="text-sm ${textColor}">${step.msg}</p>
-                            </div>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-            }
-
-            html += '</div>';
+            html += attemptsHtml + '</div>';
             return html;
         }
 
@@ -630,6 +577,7 @@
                     const isAtBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 40;
                     
                     container.innerHTML = formatLogOutput(data.log_output);
+                    
                     statusText.innerText = `Status: ${data.status}`;
                     
                     if (data.status === 'PROCESSING' || data.status === 'FINALIZING') {

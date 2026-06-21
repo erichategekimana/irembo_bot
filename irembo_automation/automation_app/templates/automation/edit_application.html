@@ -91,6 +91,10 @@
                                 {% endfor %}
                             </select>
                         </div>
+                        <div class="col-span-2 mt-4">
+                            <label class="block text-sm font-medium text-slate-300 mb-2">Comment</label>
+                            <textarea name="comment" rows="3" placeholder="Enter comments or notes about this application..." class="w-full bg-slate-700 border border-slate-600 text-slate-100 px-4 py-2 rounded focus:outline-none focus:border-emerald-500">{{ app.comment|default:'' }}</textarea>
+                        </div>
                     </div>
                 </div>
 

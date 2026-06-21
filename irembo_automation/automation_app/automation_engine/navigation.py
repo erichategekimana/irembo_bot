@@ -59,6 +59,7 @@ class NavigationMixin:
         self.page.wait_for_load_state("networkidle")
 
         self.handle_identity_verification(national_id, verification_data)
+        self.capture_error_if_any()
 
         # ── After identity modal closes, Angular re-renders the form ──────────
         # Give the page time to settle before looking for the next input.
@@ -141,6 +142,7 @@ class NavigationMixin:
             prov_field.press("Enter")
 
         time.sleep(2)
+        self.capture_error_if_any()
         self.check_for_errors()
 
     def _save_debug_screenshot(self, label="debug"):

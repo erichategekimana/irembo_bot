@@ -126,6 +126,8 @@ class PollingMixin:
                 if self.page is None or self.page.is_closed():
                     raise Exception("Browser page is closed.")
 
+                self.capture_error_if_any()
+
                 # Select the current time
                 self.log_message(f"Selecting time slot: {time_options[time_index]} (index {time_index})")
                 if not self._select_time_slot_by_index(time_index):

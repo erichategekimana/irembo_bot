@@ -81,6 +81,8 @@ class ClientApplication(models.Model):
     # Handshake & Output Fields
     billing_number = models.CharField(max_length=50, blank=True, null=True)
     application_number = models.CharField(max_length=50, blank=True, null=True)
+    failure_reason = models.CharField(max_length=255, blank=True, null=True, help_text="Stored Kinyarwanda reason code for automation failure")
+    comment = models.TextField(blank=True, null=True, help_text="User comments about this application")
     retry_attempts = models.PositiveIntegerField(default=0)
     last_error = models.TextField(blank=True, null=True)
     log_output = models.TextField(blank=True, null=True, help_text="Detailed execution logs for the application task")

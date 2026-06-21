@@ -79,6 +79,7 @@ class FinalizationMixin:
                 time.sleep(0.3)
             else:
                 raise Exception("Submit button remained disabled after 10 seconds.")
+            self.capture_error_if_any()
             submit_btn.click()
             self.log_message("Application submitted. Waiting for confirmation page...")
         except Exception as e:
