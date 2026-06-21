@@ -40,6 +40,33 @@ def kill_browser_processes(user_data_dir):
         except Exception as e:
             print(f"[Engine] Error checking process {pid}: {e}")
 
+def save_session_state(context):
+    import os, json
+    from .config import USER_DATA_DIR_PATH
+    filepath = os.path.abspath(os.path.join(os.path.dirname(USER_DATA_DIR_PATH), "state.json"))
+    try:
+        state = context.storage_state()
+        with open(filepath, 'w') as f:
+            json.dump(state, f, indent=2)
+    except Exception:
+        pass
+
+def load_session_state(context):
+    import os, json
+    from .config import USER_DATA_DIR_PATH
+    filepath = os.path.abspath(os.path.join(os.path.dirname(USER_DATA_DIR_PATH), "state.json"))
+    if not os.path.exists(filepath):
+        return
+    try:
+        with open(filepath, 'r') as f:
+            state = json.load(f)
+        cookies = state.get("cookies", [])
+        if cookies:
+            context.add_cookies(cookies)
+            print(f"[Engine] Rehydrated {len(cookies)} cookies from backup.")
+    except Exception:
+        pass
+
 class AbortTaskException(Exception):
     """Exception raised when an automation task needs to be completely aborted and cancelled (e.g., when falling back to manual login)."""
     pass
