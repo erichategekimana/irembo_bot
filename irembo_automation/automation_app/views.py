@@ -426,15 +426,16 @@ def open_session_manager_thread(lock):
             )
             Stealth().apply_stealth_sync(context)
             
-            # Close any tabs restored by --restore-last-session BEFORE creating our fresh tab
-            for old_page in list(context.pages):
-                try:
-                    old_page.close()
-                except Exception:
-                    pass
-
-            # Now create exactly one clean, fresh tab
+            # Create exactly one clean, fresh tab FIRST to keep the context alive
             page = context.new_page()
+
+            # Now close any tabs restored by --restore-last-session
+            for old_page in list(context.pages):
+                if old_page != page:
+                    try:
+                        old_page.close()
+                    except Exception:
+                        pass
                 
             page.goto("https://irembo.gov.rw/", wait_until="networkidle")
             
