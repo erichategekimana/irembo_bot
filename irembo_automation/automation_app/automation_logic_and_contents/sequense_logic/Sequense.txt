@@ -1,0 +1,92 @@
+NB: The purpose of this prompt is to explain the sequence and the automation logic. While eywords might be wrong sometime, Keep using the ones in HTML files.
+complete and verify if one step is completed before proceed to another. The irembo website is in Kinyarwanda by default, so we'll be using Kinyarwanda.
+
+Ok. starting at home page of irembo, there are several sections and the one we are dealing with is "Polisi" and among many options available on Polisi section, we'll select "Kwiyandikisha gukora ikizamini cyo gutwara ibinyabiziga".
+After clicking on that, small pop up appear in the center of the page asking you to select service in the drop down below(it says "Hitamo serivisi muri izi zikurikira ubone gusaba")
+and under those words there's a dropdown containing four options. The one we want to automate is the first one, named "Kwiyandikisha gukora ikizamini cy'uruhushya rw'icyiciro kisumbuye"
+and the last one named "Kwiyandikisha gukora ikizamini cy'uruhushya rwa burundu rwo gutwara ikinyabiziga". Those are the only two services that we're going to be dealing with.
+So, after the above description, lemme sprit each one of the service processes into steps.
+
+I'm starting with "Kwiyandikisha gukora ikizamini cy'uruhushya rw'icyiciro kisumbuye".
+step 1: When you select that service, the "Saba" button will be enabled on that pop up
+step 2: You click on "Saba" button. This will take you to the next page. Page shows 3 steps that you have to complete to get the service that are '1. Dosiye isaba
+2. Incamake
+3. Kwishyura'.
+
+step 3: There's a table on that page titled " Amakuru y’usaba" and inside the table there's a field named "Nomero y'indangamuntu" where we put national ID number. we put national ID number.
+step 4: After you enter the ID, without clicking anywhere, small pop up comes out to validate if you really own the ID. it ask you to enter one of the name on ID(Only one) or birth dates. It ask you one of those info.
+step 5: in that pop up, there's a field named "Rimwe mu mazina (rimwe gusa)" where you put one of the name or "Itariki y'amavuko*" which is field for birth dates. You never know which one website will bring, you just be ready for anything, and then you enter the requested information(birth date or name) to be validated.
+step 6: You click on checkbox "Nemeye amategeko agenga imikoreshereze" to accept terms and services and then you click on "Genzura" button to varify.
+
+expected errors:
+error 1: 'Mwamaze kwiyandikisha ku kizamini. Mukoreshe *909# kugira ngo mubone kode y'ikizamini yanyu.'
+error 2: 'Ntidushoboye kubona umwirondoro wanyu muri sisiteme ya NIDA. Mwahamaghara NIDA kuri 9876 ku bindi bisobanuro.'
+error 3: 'Ibisobanuro byatanzwe ntibihuye nibyo twahawe na NIDA..'
+error 4: 'Nomero ya Perimi yabuze.'
+
+solution: solution for all the above errors, is to close verification pop-up, clear id number and rewrite it again. by doing that, system will keep changing from askin birth date to name and by doing that, we make sure that we tried all possibilities. we repeat this atleast 4 times, closing popup, rewrite id, verify 4 times. if the error keep comes, we record that, store it in logs so that user will know why that attemp failed. detecting and recording these errors is crucial part of the system.
+
+step 7: If verification succeed, you get one more table on the page titled "Ibijyanye no Kwiyandikisha", and here there's a drop down named "Icyiciro cy'uruhushya wifuza*" which is where you select a category you want to upgrade to. you select category.
+step 8: there's another field named "Akarere*" with drop down containing a district list and by default we select "Kicukiro".
+step 9: NB: this apply only on category A and B(any type of B). So, after selecting district, we select 'Aho ikizamini kizabera'. 'Guhitamo hakurikijwe aho ikizamini kizabera' we usually has two options, 'BUSANZA AUTOMATED CENTER' and 'BUSANZA SITE (KIC)'. by default system will be set to 'BUSANZA AUTOMATED CENTER', but it has to check to the database if the user didn't chose to use 'BUSANZA SITE (KIC)'.
+step 10: To select slots, we do it by following time schedules('Guhitamo hakurikijwe igihe'). On 'Igihe' dropdown, when you select time range on the dropdown, all availble slots will be listed. we select starting from the first one, if we don't find any slots there, we select another time untill the last one. 
+step 11: after selecting 'Igihe'(time), more options will appear for selecting a slot. On those appeared options, there's "Ibyiciro bihari" which show the available slots in the selected time range. Word "Ibyiciro bihari" is always followed by the number of the available slots(eg: 0 or 13) and we'll later use this to create function that checking if slots are availale.
+Each slots contain full info about the test(date, place(site), time, and available slots on that site). Here is an example:  
+"15-06-2026
+BUSANZA AUTOMATED CENTER
+8:00 AM - 9:30 AM
+Imyanya 2". Yeah, like that.
+you select one of them, and after selection, the selected one show "Watoranyijwe" to flag that it's your selection.
+click on "Ibikurikira" button. This takes you to the next page
+step 12: Here you get two options to either use "Nomero ya telefoni (Rwanda)" or "Imeyili" that will be used to receive billing number and other application details. by default our system will use "Nomero ya telefoni (Rwanda)". After ticking on checkbox, field titled "Nomero ya telefoni (Rwanda)" will appear and we enter phone number(starting with 07)
+step 13: after entering phone number, you tick " Nemeje ko amakuru yose natanze ahangaha ari ukuri kandi ajyanye n'igihe" on to accept terms and service.
+step 14: click on "Emeza" button to submit.
+
+expected errors at this step:
+error 1: 'Ntabwo wemerewe iyi serivisi.'. The solution to this error is none other that keep clicking on 'Emeza' button untill it worked(try click button again and again like 20 times). Actually this is solution for any error that accure at this step. remember to record the error for user to see it.
+
+After that, page will be refresh and new table will appear tittle with the cost of the service in 'RWF' and inside that table, there's "Kode you kwishyuriraho" followed by billing code and "ishyura" button(we don't need this button.
+step 15: We record that billing number into the system and after the billing numbers are recorded, system play sound! done.
+
+Now lemme list steps for "Kwiyandikisha gukora ikizamini cy'uruhushya rwa burundu rwo gutwara ikinyabiziga".
+
+the first 5 steps are the same. exactly the same. So, I'll continue on step 6 which is also similar.
+
+step 6: You tick on "Nemeye amategeko agenga imikoreshereze" to accept terms and services and then you click on "Genzura" button to varify.
+
+expected errors:
+error 1: 'Mwamaze kwiyandikisha ku kizamini. Mukoreshe *909# kugira ngo mubone kode y'ikizamini yanyu.'
+error 2: 'Ntidushoboye kubona umwirondoro wanyu muri sisiteme ya NIDA. Mwahamaghara NIDA kuri 9876 ku bindi bisobanuro.'
+error 3: 'Ibisobanuro byatanzwe ntibihuye nibyo twahawe na NIDA..'
+error 4: 'Umuturage uhujwe niyi nyandiko asanzwe afite uruhushya.'
+
+solution: solution for all the above errors, is to close verification pop-up, clear id number and rewrite it again. by doing that, system will keep changing from askin birth date to name and by doing that, we make sure that we tried all possibilities. we repeat this atleast 4 times, closing popup, rewrite id, verify 4 times. if the error keep comes, we record that, store it in logs so that user will know why that attemp failed. detecting and recording these errors is crucial part of the system.
+
+step 7: after verification succeed, you get one more field to fill provisior number and the field is titled "Nomero y'uruhushya rw'agateganyo". You fill it and after filling the number, new table will appear under the current one and it is titled " Ibijyanye no Kwiyandikisha" with other new fields.
+
+expected errors:
+error 1: 'Uruhushya rwanyu rw'agateganyo rwatakaje agaciro, mwongeresheje uruhushya rwanyu mbere yo kwiyandikisha ku ruhushya rwa burundu..'
+solution: instead of exiting, you click on search agian and again atleast 4 times. even if it's a different error, you click on search because maybe it's just network or something. 
+
+step 8: On new opened table there's a drop down named "Icyiciro cy'uruhushya wifuza" which is where you select a category you want to register.
+step 9: there's another field named "Akarere*" with drop down containing a district list and by default we select "Kicukiro".
+step 10: So, after selecting district, we select 'Aho ikizamini kizabera'. 'Guhitamo hakurikijwe aho ikizamini kizabera' we usually has two options, 'BUSANZA AUTOMATED CENTER' and 'BUSANZA SITE (KIC)'. by default system will be set to 'BUSANZA AUTOMATED CENTER', but it has to check to the database if the user didn't choose to use 'BUSANZA SITE (KIC)'.
+step 11: To select slots, we do it by following time schedules('Guhitamo hakurikijwe igihe'). On 'Igihe' dropdown, when you select time range on the dropdown, all availble slots will be listed. we select starting from the first one, if we don't find any slots there, we select another time untill the last one. 
+step 12: after selecting 'Igihe'(time), more options will appear for selecting a slot. On those appeared options, there's "Ibyiciro bihari" which show the available slots in the selected time range. Word "Ibyiciro bihari" is always followed by the number of the available slots(eg: 0 or 13) and we'll later use this to create function that checking if slots are availale.
+Each slots contain full info about the test(date, place(site), time, and available slots on that site). Here is an example:  
+"15-06-2026
+BUSANZA AUTOMATED CENTER
+8:00 AM - 9:30 AM
+Imyanya 2". Yeah, like that.
+you select one of them, and after selection, the selected one show "Watoranyijwe" to flag that it's your selection.
+click on "Ibikurikira" button. This takes you to the next page
+step 13: Here you get two options to either use "Nomero ya telefoni (Rwanda)" or "Imeyili" that will be used to receive billing number and other application details. by default our system will use "Nomero ya telefoni (Rwanda)". After ticking on checkbox, field titled "Nomero ya telefoni (Rwanda)" will appear and we enter phone number(starting with 07)
+step 14: after entering phone number, you tick " Nemeje ko amakuru yose natanze ahangaha ari ukuri kandi ajyanye n'igihe" on to accept terms and service.
+step 15: click on "Emeza" button to submit.
+
+expected errors at this step:
+error 1: 'Ntabwo wemerewe iyi serivisi.'. The solution to this error is none other that keep clicking on 'Emeza' button untill it worked(try click button again and again like 20 times). Actually this is solution for any error that accure at this step. remember to record the error for user to see it.
+
+After that, page will be refresh and new table will appear tittle with the cost of the service in 'RWF' and inside that table, there's "Kode you kwishyuriraho" followed by billing code and "ishyura" button(we don't need this button.
+step 16: We record that billing number into the system and after the billing numbers are recorded, system play sound! done.
+
