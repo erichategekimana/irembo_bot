@@ -1,0 +1,150 @@
+{% extends 'automation/dashboard.html' %}
+
+{% block title %}Application Details - {{ app.first_name }} {{ app.last_name }}{% endblock %}
+
+{% block content %}
+<!-- Use a full page layout, hiding the dashboard sidebar just for this view, or we can just render a standalone page -->
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>Application Details — {{ app.first_name }} {{ app.last_name }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+        @custom-variant dark (&:where(.dark, .dark *));
+    </style>
+    <script>
+        if (localStorage.getItem('theme') === 'light' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: light)').matches)) {
+            document.documentElement.classList.remove('dark');
+        } else {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-sans min-h-screen p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-4">
+                <a href="{% url 'dashboard' %}" class="bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg transition-all border border-slate-200 dark:border-slate-700 font-medium">
+                    ← Back to Dashboard
+                </a>
+                <h1 class="text-3xl font-bold text-slate-900 dark:text-white">Application Details</h1>
+            </div>
+            <div class="flex gap-2">
+                <a href="{% url 'edit_application' app.id %}" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-medium shadow-lg transition-all">
+                    ✎ Edit Applicant
+                </a>
+                {% if app.status == 'PENDING' or app.status == 'FAILED' or app.status == 'CANCELED' %}
+                <a href="{% url 'start_automation' app.id %}" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-medium shadow-lg transition-all">
+                    ▶ Run Engine
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Profile Card -->
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 p-8 mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100 dark:border-slate-700 pb-6 mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{{ app.first_name }} {{ app.last_name }}</h2>
+                    <p class="text-slate-500 dark:text-slate-400 mt-1 font-mono">{{ app.national_id }} • {{ app.phone_number }}</p>
+                </div>
+                <div class="flex items-center gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <div>
+                        <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Current State</div>
+                        <span class="px-3 py-1.5 rounded-full text-xs font-bold 
+                            {% if app.status == 'PENDING' %} bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-300
+                            {% elif app.status == 'PROCESSING' %} bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300 animate-pulse
+                            {% elif app.status == 'SUCCESS' %} bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300
+                            {% elif app.status == 'FAILED' or app.status == 'CANCELED' %} bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-300
+                            {% else %} bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-300 {% endif %}">
+                            {{ app.get_status_display }}
+                        </span>
+                    </div>
+                    <div class="h-8 w-px bg-slate-200 dark:bg-slate-700"></div>
+                    <div>
+                        <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Active Billing</div>
+                        <div class="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {{ app.billing_number|default:"None" }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Target Category</div>
+                    <div class="font-medium text-slate-900 dark:text-slate-100">{{ app.category }} {% if app.provisional_number %}(Definitive){% else %}(Upgrade){% endif %}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Provisional Number</div>
+                    <div class="font-medium text-slate-900 dark:text-slate-100 font-mono">{{ app.provisional_number|default:"N/A" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Created At</div>
+                    <div class="font-medium text-slate-900 dark:text-slate-100">{{ app.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Table -->
+        <h3 class="text-xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <span class="text-amber-500">⏳</span> Automation Execution History
+        </h3>
+        
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            {% if history_records %}
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 uppercase text-xs tracking-wider border-b border-slate-200 dark:border-slate-700">
+                        <th class="p-4 font-semibold">Run Date</th>
+                        <th class="p-4 font-semibold">Status Outcome</th>
+                        <th class="p-4 font-semibold">Billing Generated</th>
+                        <th class="p-4 font-semibold">Failure Reason / Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in history_records %}
+                    <tr class="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-750 transition-colors">
+                        <td class="p-4 font-mono text-sm text-slate-700 dark:text-slate-300">
+                            {{ run.run_date|date:"Y-m-d H:i:s" }}
+                        </td>
+                        <td class="p-4">
+                            <span class="px-2 py-1 rounded text-xs font-bold 
+                                {% if run.status == 'SUCCESS' %} bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300
+                                {% elif run.status == 'FAILED' or run.status == 'CANCELED' %} bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300
+                                {% else %} bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300 {% endif %}">
+                                {{ run.status }}
+                            </span>
+                        </td>
+                        <td class="p-4 font-mono font-bold text-sm {% if run.billing_number %}text-emerald-600 dark:text-emerald-400{% else %}text-slate-400 dark:text-slate-500{% endif %}">
+                            {{ run.billing_number|default:"—" }}
+                        </td>
+                        <td class="p-4 text-sm text-slate-600 dark:text-slate-400">
+                            {% if run.failure_reason %}
+                                <span class="text-rose-600 dark:text-rose-400 font-medium">{{ run.failure_reason }}</span>
+                            {% elif run.status == 'SUCCESS' %}
+                                <span class="text-emerald-600 dark:text-emerald-400">Completed Successfully</span>
+                            {% else %}
+                                <span class="italic">Interrupted / Unknown</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="p-12 text-center">
+                <div class="text-4xl mb-4">📭</div>
+                <h4 class="text-lg font-bold text-slate-700 dark:text-slate-300 mb-1">No Execution History</h4>
+                <p class="text-slate-500 dark:text-slate-400 text-sm">This application has never been processed by the automation engine.</p>
+            </div>
+            {% endif %}
+        </div>
+        
+    </div>
+</body>
+</html>
+{% endblock %}

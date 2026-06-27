@@ -130,3 +130,26 @@ class ClientApplication(models.Model):
         # Provisional number required for definitive license applications
         if not self.is_upgrade_application and not self.provisional_number:
             pass  # Handled at the engine level with clear error messages
+
+class ApplicationRunHistory(models.Model):
+    """
+    Records the outcome of each automation attempt for a given application.
+    This prevents data loss if an application is re-run (e.g., if a payment code expires).
+    """
+    application = models.ForeignKey(ClientApplication, on_delete=models.CASCADE, related_name='run_history')
+    run_date = models.DateTimeField(auto_now_add=True)
+    
+    # Snapshot of the state when the run completed
+    status = models.CharField(max_length=20)
+    payment_status = models.CharField(max_length=20)
+    billing_number = models.CharField(max_length=50, blank=True, null=True)
+    failure_reason = models.CharField(max_length=255, blank=True, null=True)
+    log_output = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-run_date']
+        verbose_name = "Application Run History"
+        verbose_name_plural = "Application Run Histories"
+
+    def __str__(self):
+        return f"Run for {self.application.national_id} at {self.run_date.strftime('%Y-%m-%d %H:%M:%S')} - {self.status}"

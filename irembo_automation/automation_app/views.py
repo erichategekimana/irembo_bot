@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
-from .models import ClientApplication
+from .models import ClientApplication, ApplicationRunHistory
 from automation_app.automation_engine import IremboAutomationEngine
 from automation_app.automation_engine.utils import run_in_db_thread, AbortTaskException
 from playwright.sync_api import sync_playwright  # type: ignore[import]
@@ -23,9 +23,16 @@ def run_automation_worker(application_id):
     def _init_run():
         try:
             app = ClientApplication.objects.get(id=application_id)
+            
+            # Clear previous specific outputs to start fresh. 
+            # Old data was already archived in ApplicationRunHistory at the end of the previous run.
+            app.billing_number = None
+            app.failure_reason = None
+            app.last_error = None
+            app.log_output = ""
+            
             app.status = ClientApplication.ProcessStatus.PROCESSING
             app.retry_attempts = 0
-            app.last_error = None
             timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
             app.log_output = f"[{timestamp}] [INFO] Starting automation process...\n"
             app.save()
@@ -156,6 +163,24 @@ def run_automation_worker(application_id):
             if attempt < max_attempts:
                 time.sleep(10)
 
+    # Archive the final outcome of this entire run
+    def _archive_run():
+        try:
+            app = ClientApplication.objects.get(id=application_id)
+            ApplicationRunHistory.objects.create(
+                application=app,
+                status=app.status,
+                payment_status=app.payment_status,
+                billing_number=app.billing_number,
+                failure_reason=app.failure_reason,
+                log_output=app.log_output
+            )
+            print(f"[Worker Thread] Archived run history for application {application_id}")
+        except Exception as e:
+            print(f"[Worker Thread] Failed to archive run history: {e}")
+            
+    run_in_db_thread(_archive_run)
+
 def dashboard(request):
     """Renders the central monitoring dashboard panel grid with search, filter, and sort."""
     query = request.GET.get('q', '')
@@ -280,6 +305,17 @@ def edit_application(request, application_id):
         'payment_choices': ClientApplication.PaymentStatus.choices,
     }
     return render(request, 'automation/edit_application.html', context)
+
+def application_details(request, application_id):
+    """View detailed history and profile of an application."""
+    app = get_object_or_404(ClientApplication, id=application_id)
+    history_records = app.run_history.all()
+    
+    context = {
+        'app': app,
+        'history_records': history_records,
+    }
+    return render(request, 'automation/application_details.html', context)
 
 @require_POST
 def delete_application(request, application_id):

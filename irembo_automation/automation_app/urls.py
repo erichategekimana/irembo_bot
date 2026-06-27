@@ -7,6 +7,7 @@ urlpatterns = [
     path('create/', views.create_application, name='create_application'),
     path('edit/<int:application_id>/', views.edit_application, name='edit_application'),
     path('delete/<int:application_id>/', views.delete_application, name='delete_application'),
+    path('details/<int:application_id>/', views.application_details, name='application_details'),
     path('bulk-action/', views.bulk_action, name='bulk_action'),
     path('start/<int:application_id>/', views.start_automation, name='start_automation'),
     path('api/status/', views.api_status_feed, name='api_status_feed'),
