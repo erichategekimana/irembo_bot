@@ -131,8 +131,13 @@
                     <tr class="border-b border-slate-200 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/20">
                         <td colspan="4" class="p-4">
                             <div class="text-xs uppercase font-bold text-slate-400 mb-2">Execution Logs (Attempts)</div>
-                            <div class="raw-logs hidden">{{ run.log_output }}</div>
-                            <div class="log-container space-y-2"></div>
+                            <div id="log-container-{{ run.id }}" class="space-y-2"></div>
+                            <script>
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    const rawLogs = "{{ run.log_output|escapejs }}";
+                                    document.getElementById('log-container-{{ run.id }}').innerHTML = formatLogOutput(rawLogs);
+                                });
+                            </script>
                         </td>
                     </tr>
                     {% endif %}
@@ -201,15 +206,6 @@
             return attemptsHtml;
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.log-container').forEach(container => {
-                const rawLogsDiv = container.previousElementSibling;
-                if (rawLogsDiv && rawLogsDiv.classList.contains('raw-logs')) {
-                    const rawLogs = rawLogsDiv.textContent;
-                    container.innerHTML = formatLogOutput(rawLogs);
-                }
-            });
-        });
     </script>
 </body>
 </html>
