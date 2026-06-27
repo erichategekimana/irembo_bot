@@ -44,6 +44,7 @@ step 14: click on "Emeza" button to submit.
 
 expected errors at this step:
 error 1: 'Ntabwo wemerewe iyi serivisi.'. The solution to this error is none other that keep clicking on 'Emeza' button untill it worked(try click button again and again like 20 times). Actually this is solution for any error that accure at this step. remember to record the error for user to see it.
+error 2: 'Nomero ya Perimi yabuze.', Here, you also keep clicking on 'Emeza' button untill it worked. if it doesn't work even after 20 clicks, then record the error for user to see it.
 
 After that, page will be refresh and new table will appear tittle with the cost of the service in 'RWF' and inside that table, there's "Kode you kwishyuriraho" followed by billing code and "ishyura" button(we don't need this button.
 step 15: We record that billing number into the system and after the billing numbers are recorded, system play sound! done.

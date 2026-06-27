@@ -98,6 +98,18 @@ def run_automation_worker(application_id):
                     print(f"[Worker Thread] Process completed cleanly for ID {application.national_id}. Billing Code: {final_billing}")
                     
                     break  # Success! Exit retry loop
+                elif final_status == ClientApplication.ProcessStatus.FAILED:
+                    msg = f"Process failed gracefully for ID {application.national_id}. Exiting retry loop."
+                    print(f"[Worker Thread] {msg}")
+                    timestamp = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+                    def _log_graceful_fail():
+                        app = ClientApplication.objects.get(id=application_id)
+                        app.log_output += f"[{timestamp}] [INFO] {msg}\n"
+                        # Ensure last_error is populated so the UI knows it's a hard stop
+                        app.last_error = "Gracefully aborted by engine."
+                        app.save(update_fields=["log_output", "last_error"])
+                    run_in_db_thread(_log_graceful_fail)
+                    break  # Engine explicitly set FAILED (e.g., no slots), exit retry loop
                 else:
                     raise Exception("Slot polling finished without securing a billing code.")
 

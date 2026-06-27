@@ -123,6 +123,14 @@ class IdentityMixin:
 
             try:
                 self.page.wait_for_selector("mat-dialog-container", state="detached", timeout=10000)
+                
+                # Wait briefly for any post-modal errors to render on the main page
+                time.sleep(1)
+                found, reason, raw = self._scan_for_errors()
+                if found:
+                    self.log_message(f"Error '{reason}' detected after modal detached.", level="WARNING")
+                    raise ValueError(f"Irembo Error: {reason}")
+                    
                 self.log_message("Identity verification completed successfully.")
                 break # Success! exit the retry loop
             except Exception:

@@ -83,38 +83,56 @@ class NavigationMixin:
             'input[placeholder*="license" i]',
         ]
 
-        start = time.time()
-        prov_field = None
-        found_selector = None
-
-        while time.time() - start < 15:
-            for selector in candidate_selectors:
-                try:
-                    loc = self.page.locator(selector).first
-                    if loc.is_visible():
-                        prov_field = loc
-                        found_selector = selector
-                        break
-                except:
+        for overall_attempt in range(2):
+            start = time.time()
+            prov_field = None
+            found_selector = None
+    
+            while time.time() - start < 15:
+                for selector in candidate_selectors:
+                    try:
+                        loc = self.page.locator(selector).first
+                        if loc.is_visible():
+                            prov_field = loc
+                            found_selector = selector
+                            break
+                    except:
+                        continue
+                if prov_field:
+                    break
+                time.sleep(0.5)
+    
+            if prov_field is None:
+                found, reason, raw = self._scan_for_errors()
+                if found:
+                    self.log_message(f"Error '{reason}' detected while waiting for provisional field.", level="WARNING")
+                    self.capture_error_if_any()
+                    
+                if overall_attempt == 0:
+                    self.log_message("Provisional field not found. Retrying...", level="WARNING")
+                    time.sleep(2)
                     continue
-            if prov_field:
+    
+                self._save_debug_screenshot("provisional_field_not_found")
+                self._pause_on_error(
+                    "Provisional license number field not found after 15s. "
+                    "The page may not have loaded correctly after identity verification. "
+                    "A debug screenshot has been saved to media/debug/."
+                )
+                return
+    
+            try:
+                self.log_message(f"Provisional field located via: {found_selector}")
+                prov_field.fill(provisional_number)
+                prov_field.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
+                prov_field.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
+                time.sleep(0.5)
                 break
-            time.sleep(0.5)
-
-        if prov_field is None:
-            self._save_debug_screenshot("provisional_field_not_found")
-            self._pause_on_error(
-                "Provisional license number field not found after 15s. "
-                "The page may not have loaded correctly after identity verification. "
-                "A debug screenshot has been saved to media/debug/."
-            )
-            return
-
-        self.log_message(f"Provisional field located via: {found_selector}")
-        prov_field.fill(provisional_number)
-        prov_field.evaluate("el => el.dispatchEvent(new Event('input', { bubbles: true }))")
-        prov_field.evaluate("el => el.dispatchEvent(new Event('change', { bubbles: true }))")
-        time.sleep(0.5)
+            except Exception as e:
+                self.log_message(f"Error filling provisional field: {e}. Retrying...", level="WARNING")
+                if overall_attempt == 1:
+                    raise e
+                time.sleep(1)
 
         self.log_message("Submitting provisional license details...")
 

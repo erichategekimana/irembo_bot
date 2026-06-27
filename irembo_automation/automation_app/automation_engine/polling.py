@@ -1,6 +1,7 @@
 # automation_app/automation_engine/polling.py
 import random
 import time
+from .utils import run_in_db_thread
 
 class PollingMixin:
     def _get_time_options(self):
@@ -164,7 +165,17 @@ class PollingMixin:
                     if time_index >= len(time_options):
                         cycle_count += 1
                         if cycle_count >= 2:
-                            self._pause_on_error(f"Ntakode zibonetse muri {target_district}")
+                            self.log_message(f"Ntakode zibonetse muri {target_district}. Exiting polling gracefully.")
+                            if self.booking_record:
+                                record = self.booking_record
+                                def _fail():
+                                    from automation_app.models import ClientApplication
+                                    app = ClientApplication.objects.get(id=record.id)
+                                    app.status = 'FAILED'
+                                    app.failure_reason = 'NTAKODE_ZIBONETSE'
+                                    app.save(update_fields=["status", "failure_reason"])
+                                run_in_db_thread(_fail)
+                            return None
                             
                         # All times exhausted – toggle district
                         self.log_message(f"All time slots exhausted (Cycle {cycle_count}/2). Toggling district to refresh...")
@@ -205,7 +216,17 @@ class PollingMixin:
                 if time_index >= len(time_options):
                     cycle_count += 1
                     if cycle_count >= 2:
-                        self._pause_on_error(f"Ntakode zibonetse muri {target_district}")
+                        self.log_message(f"Ntakode zibonetse muri {target_district}. Exiting polling gracefully.")
+                        if self.booking_record:
+                            record = self.booking_record
+                            def _fail():
+                                from automation_app.models import ClientApplication
+                                app = ClientApplication.objects.get(id=record.id)
+                                app.status = 'FAILED'
+                                app.failure_reason = 'NTAKODE_ZIBONETSE'
+                                app.save(update_fields=["status", "failure_reason"])
+                            run_in_db_thread(_fail)
+                        return None
                         
                     # All times exhausted – toggle district to refresh
                     self.log_message(f"All time slots exhausted (Cycle {cycle_count}/2). Toggling district to refresh...")

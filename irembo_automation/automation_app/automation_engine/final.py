@@ -70,6 +70,7 @@ class FinalizationMixin:
         # ── Step 4: Submit the application ────────────────────────────────────
         submit_success = False
         submit_btn = self.page.locator('#submit_btn')
+        last_error_reason = None
         
         for attempt in range(20):
             try:
@@ -79,7 +80,7 @@ class FinalizationMixin:
                 while time.time() - start < 10:
                     if not submit_btn.is_disabled():
                         break
-                    time.sleep(0.3)
+                    time.sleep(random.uniform(0.3, 0.6))
                 else:
                     raise Exception("Submit button remained disabled after 10 seconds.")
                 
@@ -91,23 +92,31 @@ class FinalizationMixin:
                 found, reason, raw = self._scan_for_errors()
                 if found:
                     self.log_message(f"Attempt {attempt+1} failed with error '{reason}'. Retrying...", level="WARNING")
-                    time.sleep(random.uniform(1.0, 2.0))
+                    last_error_reason = reason
+                    time.sleep(random.uniform(2.0, 4.0))
                     continue
-                
-                # Double check for generic errors
-                self.check_for_errors()
                 
                 self.log_message("Application submitted successfully. Waiting for confirmation page...")
                 submit_success = True
                 break # Success!
             except Exception as e:
                 self.log_message(f"Attempt {attempt+1} threw exception: {e}. Retrying...", level="WARNING")
-                time.sleep(random.uniform(1.0, 2.0))
+                time.sleep(random.uniform(1.5, 3.0))
                 continue
                 
         if not submit_success:
             self.log_message("Submit button failed after 20 attempts.", level="ERROR")
-            self.update_database_state("FAILED")
+            if last_error_reason and self.booking_record:
+                record = self.booking_record
+                def _save_fail():
+                    from automation_app.models import ClientApplication
+                    app = ClientApplication.objects.get(id=record.id)
+                    app.status = "FAILED"
+                    app.failure_reason = last_error_reason
+                    app.save(update_fields=["status", "failure_reason"])
+                run_in_db_thread(_save_fail)
+            else:
+                self.update_database_state("FAILED")
             return None
 
                 # ── Step 5: Collect billing number ──────────────────────────
