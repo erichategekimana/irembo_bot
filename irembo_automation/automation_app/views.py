@@ -343,7 +343,7 @@ def start_automation(request, application_id):
 def api_status_feed(request):
     """Asynchronous JSON polling feed utilized by dashboard JavaScript tickers."""
     applications_data = list(ClientApplication.objects.values(
-        'id', 'status', 'billing_number', 'retry_attempts', 'last_error', 'user_response', 'comment'
+        'id', 'status', 'failure_reason', 'billing_number', 'retry_attempts', 'last_error', 'user_response', 'comment'
     ))
     return JsonResponse({'applications': applications_data})
 

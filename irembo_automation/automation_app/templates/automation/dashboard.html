@@ -396,9 +396,13 @@
 
                         if (badge) {
                             const statusInfo = renderStatusBadge(item.status);
+                            let finalBadgeText = statusInfo.text;
+                            if (item.status === 'FAILED' && item.failure_reason) {
+                                finalBadgeText += ` (${item.failure_reason})`;
+                            }
                             const currentText = badge.innerText.trim();
-                            if (currentText !== statusInfo.text) {
-                                badge.innerText = statusInfo.text;
+                            if (currentText !== finalBadgeText) {
+                                badge.innerText = finalBadgeText;
                             }
                             badge.className = `px-2.5 py-1 rounded-full text-xs font-medium ${statusInfo.classes}`;
                         }
@@ -526,7 +530,18 @@
                                 <span>${msg}</span>
                             </div>
                         `;
+                    } else if (msg.includes('Ntakode zibonetse') || msg.includes('Gracefully aborted')) {
+                        attemptsHtml += `
+                            <div class="p-4 rounded-lg border border-orange-200 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-950/20 text-orange-800 dark:text-orange-300 font-medium text-sm flex items-start gap-3">
+                                <span class="text-orange-500">⚠️</span>
+                                <span>${msg}</span>
+                            </div>
+                        `;
+                    } else {
+                        attemptsHtml += `<div class="text-xs text-slate-600 dark:text-slate-400 font-mono py-1 border-b border-slate-100 dark:border-slate-800/50">${line}</div>`;
                     }
+                } else {
+                    attemptsHtml += `<div class="text-xs text-slate-600 dark:text-slate-400 font-mono py-1 border-b border-slate-100 dark:border-slate-800/50">${line}</div>`;
                 }
             });
 
@@ -581,7 +596,11 @@
                     
                     container.innerHTML = formatLogOutput(data.log_output);
                     
-                    statusText.innerText = `Status: ${data.status}`;
+                    if (data.status === 'FAILED' && data.failure_reason) {
+                        statusText.innerText = `Status: ${data.status} (${data.failure_reason})`;
+                    } else {
+                        statusText.innerText = `Status: ${data.status}`;
+                    }
                     
                     if (data.status === 'PROCESSING' || data.status === 'FINALIZING') {
                         dot.className = 'w-3 h-3 rounded-full bg-blue-500 animate-pulse';
