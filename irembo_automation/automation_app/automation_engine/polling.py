@@ -35,6 +35,8 @@ class PollingMixin:
         if not panel_opened:
             print("[Warning] Failed to open time dropdown panel after 3 attempts.")
             return []
+        time_dropdown.click()
+        self.page.wait_for_selector(".ng-dropdown-panel", timeout=5000)
 
         options = self.page.locator('.ng-dropdown-panel .ng-option')
         options.first.wait_for(state="visible", timeout=3000)
@@ -74,6 +76,8 @@ class PollingMixin:
         if not panel_opened:
             print("[Warning] Failed to open time dropdown panel after 3 attempts.")
             return False
+        time_dropdown.click()
+        self.page.wait_for_selector(".ng-dropdown-panel", timeout=5000)
 
         options = self.page.locator('.ng-dropdown-panel .ng-option')
         count = options.count()
@@ -154,8 +158,6 @@ class PollingMixin:
                 # Check page closure before starting the iteration
                 if self.page is None or self.page.is_closed():
                     raise Exception("Browser page is closed.")
-
-                self.capture_error_if_any()
 
                 # Select the current time
                 self.log_message(f"Selecting time slot: {time_options[time_index]} (index {time_index})")

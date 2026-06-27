@@ -117,6 +117,12 @@ class FinalizationMixin:
                 run_in_db_thread(_save_fail)
             else:
                 self.update_database_state("FAILED")
+                raise Exception("Submit button remained disabled after 10 seconds.")
+            submit_btn.click()
+            self.log_message("Application submitted. Waiting for confirmation page...")
+        except Exception as e:
+            self.log_message(f"Submit button error: {e}", level="ERROR")
+            self.update_database_state("FAILED")
             return None
 
                 # ── Step 5: Collect billing number ──────────────────────────

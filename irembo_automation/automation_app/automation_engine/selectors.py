@@ -68,6 +68,9 @@ class SelectorsMixin:
                 
         if not panel_opened:
             raise ValueError(f"Failed to open dropdown panel for '{control_name}' after 3 attempts.")
+        dropdown.click()
+        # Wait for the dropdown panel to appear
+        self.page.wait_for_selector(".ng-dropdown-panel", timeout=5000)
 
         # Now get all options – but wait for the first one to be visible (fixes strict mode)
         options = self.page.locator('.ng-dropdown-panel .ng-option')

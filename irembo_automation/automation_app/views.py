@@ -530,6 +530,16 @@ def open_session_manager_thread(lock):
                     p.close()
                 except Exception:
                     pass
+            # Create exactly one clean, fresh tab FIRST to keep the context alive
+            page = context.new_page()
+
+            # Now close any tabs restored by --restore-last-session
+            for old_page in list(context.pages):
+                if old_page != page:
+                    try:
+                        old_page.close()
+                    except Exception:
+                        pass
                 
             page.goto("https://irembo.gov.rw/", wait_until="networkidle")
             
